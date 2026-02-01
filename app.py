@@ -41,7 +41,7 @@ except Exception as e:
 col_icon, col_title = st.columns([1, 6]) 
 
 with col_icon:
-    st.image("cspca_icon.png", width=90) # Điều chỉnh width nếu cần
+    st.image("cspca_icon.png", width=200) # Điều chỉnh width nếu cần
 
 with col_title:
     st.title("csPCa Risk & Uncertainty Analysis")
