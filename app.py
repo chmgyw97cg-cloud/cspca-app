@@ -10,7 +10,7 @@ import seaborn as sns
 # ==========================================
 # 1. PAGE CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="csPCa Risk Assistant")
+st.set_page_config(page_title="csPCa Risk Assistant", layout="centered")
 
 # ==========================================
 # 2. MODEL LOADING
@@ -31,7 +31,7 @@ except Exception as e:
 # ==========================================
 # 3. USER INTERFACE
 # ==========================================
-st.title("🛡️ csPCa Risk & Uncertainty Analysis", layout="centered")
+st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     st.markdown("""
