@@ -33,7 +33,6 @@ except Exception as e:
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# Tiêu chuẩn lâm sàng (Giữ lại để tham chiếu)
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     st.markdown("""
     This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
@@ -43,7 +42,7 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
 
-# --- SIDEBAR: INPUTS (Đúng thứ tự yêu cầu) ---
+# --- SIDEBAR: INPUTS ---
 with st.sidebar:
     st.header("📋 Patient Data")
     
@@ -60,7 +59,6 @@ with st.sidebar:
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     
     # 5. History (Family & Biopsy)
-    # Gom lại gần nhau, dùng horizontal để gọn
     fam = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
     
@@ -70,9 +68,9 @@ with st.sidebar:
     st.divider()
 
 # ==========================================
-# 4. PREDICTION LOGIC (Cấu trúc nút bấm CŨ)
+# 4. PREDICTION LOGIC
 # ==========================================
-# Nút bấm nằm ở cột chính (Main Column), ngay dưới tiêu đề, giống mã cũ
+# Main Column
 if st.button("🚀 RUN ANALYSIS"):
     
     # --- A. Pre-processing ---
