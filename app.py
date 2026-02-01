@@ -37,7 +37,14 @@ except Exception as e:
 # ==========================================
 # 3. USER INTERFACE
 # ==========================================
-st.title("🛡️ csPCa Risk & Uncertainty Analysis")
+#st.title("🛡️ csPCa Risk & Uncertainty Analysis")
+col_icon, col_title = st.columns([1, 6]) 
+
+with col_icon:
+    st.image("cspca_icon.png", width=90) # Điều chỉnh width nếu cần
+
+with col_title:
+    st.title("csPCa Risk & Uncertainty Analysis")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     st.markdown("""
