@@ -11,7 +11,13 @@ import seaborn as sns
 # 1. PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="csPCa Risk Assistant", layout="centered")
-
+st.markdown("""
+    <style>
+    h1 {
+        font-size: 2.2rem !important; /* Thu nhỏ font tiêu đề một chút */
+    }
+    </style>
+    """, unsafe_allow_html=True)
 # ==========================================
 # 2. MODEL LOADING
 # ==========================================
