@@ -42,23 +42,30 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
 
-# --- SIDEBAR: RE-ORGANIZED FOR CLINICAL LOGIC ---
+# --- SIDEBAR: 3-GROUP LAYOUT (User Idea) ---
 with st.sidebar:
-    # GROUP 1: PATIENT HISTORY
-    st.header("👤 Patient History")
+    st.title("📋 Patient Data")
+    
+    # GROUP 1: SCREENING (Tuổi, PSA)
+    st.header("1. Baseline Profile")
     age = st.number_input("Age (years)", 40, 95, 65, help="Range: 55-75")
-    fam = st.radio("Family History", ["No", "Yes", "Unknown"])
-    biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"])
-    
-    st.divider()
-    
-    # GROUP 2: CLINICAL & IMAGING MARKERS
-    st.header("🏥 Clinical & Imaging Findings")
     psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5, help="Range: 0.4-50.0")
+    
+    st.divider() # Đường kẻ phân cách
+    
+    # GROUP 2: HISTORY & EXAM (Tiền sử, DRE)
+    st.header("2. History & Physical")
+    fam = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
+    biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
+    dre = st.radio("DRE Findings", ["Normal", "Abnormal"], horizontal=True)
+    
+    st.divider() # Đường kẻ phân cách
+    
+    # GROUP 3: IMAGING (Thể tích, PI-RADS)
+    st.header("3. MRI & Volume")
     vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Range: 10-110")
-    dre = st.radio("DRE", ["Normal", "Abnormal"])
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1, 
-                          help="Highest score on MRI")
+                          help="Based on mpMRI report")
 
 # ==========================================
 # 4. PREDICTION LOGIC
