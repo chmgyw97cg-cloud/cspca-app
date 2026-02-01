@@ -34,13 +34,13 @@ except Exception as e:
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
 # Tiêu chuẩn lâm sàng (Giữ lại để tham chiếu)
-with st.expander("📚 Clinical Standards (ERSPC/PCPT)", expanded=True):
-    st.caption("""
-    Target Population:
+with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
+    st.markdown("""
+    This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
     * **Age:** 55 – 75 years.
-    * **PSA:** 0.4 – 50.0 ng/mL.
-    * **Volume:** 10 – 110 mL.
-    * **MRI:** PI-RADS ≥ 3.
+    * **PSA Level:** 0.4 – 50.0 ng/mL.
+    * **Prostate Volume:** 10 – 110 mL.
+    * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
 
 # --- SIDEBAR: INPUTS (Đúng thứ tự yêu cầu) ---
