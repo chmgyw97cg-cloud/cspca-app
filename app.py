@@ -10,7 +10,7 @@ import seaborn as sns
 # ==========================================
 # 1. PAGE CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="csPCa Risk Assistant", layout="centered")
+st.set_page_config(page_title="csPCa Risk Assistant")
 
 # ==========================================
 # 2. MODEL LOADING
