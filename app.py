@@ -14,7 +14,7 @@ st.set_page_config(page_title="csPCa Risk Assistant", layout="centered")
 st.markdown("""
     <style>
     h1 {
-        font-size: 2.2rem !important; /* Thu nhỏ font tiêu đề một chút */
+        font-size: 2.0rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
