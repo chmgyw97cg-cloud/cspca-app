@@ -32,13 +32,7 @@ except Exception as e:
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis", layout="centered")
-st.markdown("""
-    <style>
-    h1 {
-        font-size: 2.2rem !important; /* Thu nhỏ font tiêu đề một chút */
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     st.markdown("""
     This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
