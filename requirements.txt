@@ -6,3 +6,4 @@ patsy
 scikit-learn
 xgboost
 matplotlib
+seaborn
