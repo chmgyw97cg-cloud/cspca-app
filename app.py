@@ -33,7 +33,7 @@ except Exception as e:
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# Giữ lại tiêu chuẩn lâm sàng (quan trọng cho bác sĩ tham chiếu)
+# Tiêu chuẩn lâm sàng (Giữ lại để tham chiếu)
 with st.expander("📚 Clinical Standards (ERSPC/PCPT)", expanded=True):
     st.caption("""
     Target Population:
@@ -43,7 +43,7 @@ with st.expander("📚 Clinical Standards (ERSPC/PCPT)", expanded=True):
     * **MRI:** PI-RADS ≥ 3.
     """)
 
-# --- SIDEBAR: LINEAR & COMPACT ORDER ---
+# --- SIDEBAR: INPUTS (Đúng thứ tự yêu cầu) ---
 with st.sidebar:
     st.header("📋 Patient Data")
     
@@ -59,7 +59,8 @@ with st.sidebar:
     # 4. PI-RADS
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     
-    # 5. History (Family & Biopsy) - Dùng horizontal để tiết kiệm chiều dọc
+    # 5. History (Family & Biopsy)
+    # Gom lại gần nhau, dùng horizontal để gọn
     fam = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
     
@@ -67,13 +68,14 @@ with st.sidebar:
     dre = st.radio("DRE Findings", ["Normal", "Abnormal"], horizontal=True)
     
     st.divider()
-    run_btn = st.button("🚀 RUN ANALYSIS", use_container_width=True)
 
 # ==========================================
-# 4. PREDICTION LOGIC
+# 4. PREDICTION LOGIC (Cấu trúc nút bấm CŨ)
 # ==========================================
-if run_btn:
-    # Pre-processing
+# Nút bấm nằm ở cột chính (Main Column), ngay dưới tiêu đề, giống mã cũ
+if st.button("🚀 RUN ANALYSIS"):
+    
+    # --- A. Pre-processing ---
     log_psa_val = np.log(psa)
     input_data = {
         "age": [age], "log_PSA": [log_psa_val], "log_vol": [np.log(vol)], "pirads_max": [pirads],
@@ -86,7 +88,7 @@ if run_btn:
     }
     df_input = pd.DataFrame(input_data)
     
-    # Spline logic
+    # --- B. Spline Logic ---
     all_knots_vals = [log_psa_val] + knots
     lb, ub = min(all_knots_vals) - 1.0, max(all_knots_vals) + 1.0
     spline_df = dmatrix("bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)",
@@ -94,7 +96,7 @@ if run_btn:
     if 'Intercept' in spline_df.columns: spline_df = spline_df.drop(columns=['Intercept'])
     X_final = pd.concat([df_input.reset_index(drop=True), spline_df.reset_index(drop=True)], axis=1)
 
-    # Predictions
+    # --- C. Prediction Loop ---
     base_probs = []
     for name, model in base_models.items():
         if hasattr(model, 'feature_names_in_'):
