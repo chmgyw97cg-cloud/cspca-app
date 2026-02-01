@@ -33,44 +33,46 @@ except Exception as e:
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
-    st.markdown("""
-    This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
+# Giữ lại tiêu chuẩn lâm sàng (quan trọng cho bác sĩ tham chiếu)
+with st.expander("📚 Clinical Standards (ERSPC/PCPT)", expanded=True):
+    st.caption("""
+    Target Population:
     * **Age:** 55 – 75 years.
-    * **PSA Level:** 0.4 – 50.0 ng/mL.
-    * **Prostate Volume:** 10 – 110 mL.
-    * **MRI Requirement:** PI-RADS Max Score ≥ 3.
+    * **PSA:** 0.4 – 50.0 ng/mL.
+    * **Volume:** 10 – 110 mL.
+    * **MRI:** PI-RADS ≥ 3.
     """)
 
-# --- SIDEBAR: 3-GROUP LAYOUT (User Idea) ---
+# --- SIDEBAR: LINEAR & COMPACT ORDER ---
 with st.sidebar:
-    st.title("📋 Patient Data")
+    st.header("📋 Patient Data")
     
-    # GROUP 1: SCREENING (Tuổi, PSA)
-    st.header("1. Baseline Profile")
+    # 1. Age
     age = st.number_input("Age (years)", 40, 95, 65, help="Range: 55-75")
+    
+    # 2. PSA
     psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5, help="Range: 0.4-50.0")
     
-    st.divider() # Đường kẻ phân cách
+    # 3. Volume
+    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Range: 10-110")
     
-    # GROUP 2: HISTORY & EXAM (Tiền sử, DRE)
-    st.header("2. History & Physical")
+    # 4. PI-RADS
+    pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
+    
+    # 5. History (Family & Biopsy) - Dùng horizontal để tiết kiệm chiều dọc
     fam = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
+    
+    # 6. DRE
     dre = st.radio("DRE Findings", ["Normal", "Abnormal"], horizontal=True)
     
-    st.divider() # Đường kẻ phân cách
-    
-    # GROUP 3: IMAGING (Thể tích, PI-RADS)
-    st.header("3. MRI & Volume")
-    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Range: 10-110")
-    pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1, 
-                          help="Based on mpMRI report")
+    st.divider()
+    run_btn = st.button("🚀 RUN ANALYSIS", use_container_width=True)
 
 # ==========================================
 # 4. PREDICTION LOGIC
 # ==========================================
-if st.button("🚀 RUN ANALYSIS", use_container_width=True):
+if run_btn:
     # Pre-processing
     log_psa_val = np.log(psa)
     input_data = {
