@@ -30,17 +30,29 @@ except Exception as e:
 # 2. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
-st.markdown("This tool estimates the probability of **clinically significant Prostate Cancer (csPCa)** and quantifies prediction uncertainty using 1,000 bootstrap iterations.")
+
+# Clinical Guidelines Section
+with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
+    st.markdown("""
+    This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
+    * **Age:** 55 – 75 years (Optimized range).
+    * **PSA Level:** 0.4 – 50.0 ng/mL.
+    * **Prostate Volume:** 10 – 110 mL.
+    * **MRI Requirement:** PI-RADS Max Score ≥ 3 (Targeting equivocal to high-risk lesions).
+    """)
 
 with st.sidebar:
     st.header("📋 Patient Characteristics")
-    age = st.number_input("Age (years)", 40, 95, 65)
-    psa = st.number_input("PSA (ng/mL)", 0.5, 200.0, 7.5)
-    vol = st.number_input("Prostate Volume (mL)", 10, 250, 45)
-    pirads = st.selectbox("PI-RADS Score", [3, 4, 5], index=1)
+    # Input with help tooltips based on your criteria
+    age = st.number_input("Age (years)", 40, 95, 65, help="Recommended range: 55-75 (ERSPC/PCPT)")
+    psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5, help="Recommended range: 0.4-50.0")
+    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Recommended range: 10-110")
     
     st.divider()
-    st.header("🏥 Clinical History")
+    st.header("🏥 MRI & Clinical Findings")
+    # Clarified PI-RADS label
+    pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1, 
+                          help="Enter the highest PI-RADS score identified on MRI.")
     dre = st.radio("DRE", ["Normal", "Abnormal"])
     fam = st.radio("Family History", ["No", "Yes", "Unknown"])
     biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"])
@@ -49,7 +61,7 @@ with st.sidebar:
 # 3. PREDICTION LOGIC
 # ==========================================
 if st.button("🚀 RUN ANALYSIS"):
-    # Data Pre-processing
+    # Pre-processing
     log_psa_val = np.log(psa)
     input_data = {
         "age": [age], "log_PSA": [log_psa_val], "log_vol": [np.log(vol)], "pirads_max": [pirads],
@@ -107,7 +119,5 @@ if st.button("🚀 RUN ANALYSIS"):
     ax.legend()
     st.pyplot(fig)
 
-    # Interpretation of Uncertainty
-    u_range = high_ci - low_ci
-    st.info(f"**Statistical Note:** The 95% Confidence Interval spans from {low_ci:.1%} to {high_ci:.1%} (Range: {u_range:.1%}). "
-            "A narrower distribution indicates higher model consensus.")
+    st.info(f"**Note:** 95% of model iterations fall between {low_ci:.1%} and {high_ci:.1%}. "
+            f"The consistency of the prediction is high when this range is narrow.")
