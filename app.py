@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ==========================================
-# 1. PAGE CONFIGURATION (Giao diện chuẩn/dọc)
+# 1. PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="csPCa Risk Assistant", layout="centered")
 
@@ -25,7 +25,7 @@ try:
     bootstrap_models = packet["bootstrap_models"]
     knots = packet["spline_knots"]
 except Exception as e:
-    st.error("❌ ERROR: Model file not found. Please ensure 'cspca_prediction_system.pkl' is in the same folder.")
+    st.error("❌ ERROR: Model file not found.")
     st.stop()
 
 # ==========================================
@@ -33,30 +33,32 @@ except Exception as e:
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# Clinical Guidelines Section
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=True):
     st.markdown("""
     This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
-    * **Age:** 55 – 75 years (Optimized range).
+    * **Age:** 55 – 75 years.
     * **PSA Level:** 0.4 – 50.0 ng/mL.
     * **Prostate Volume:** 10 – 110 mL.
-    * **MRI Requirement:** PI-RADS Max Score ≥ 3 (Targeting equivocal to high-risk lesions).
+    * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
 
+# --- SIDEBAR: RE-ORGANIZED FOR CLINICAL LOGIC ---
 with st.sidebar:
-    st.header("📋 Patient Characteristics")
-    # Input with help tooltips
-    age = st.number_input("Age (years)", 40, 95, 65, help="Recommended range: 55-75 (ERSPC/PCPT)")
-    psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5, help="Recommended range: 0.4-50.0")
-    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Recommended range: 10-110")
-    
-    st.divider()
-    st.header("🏥 MRI & Clinical Findings")
-    pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1, 
-                          help="Enter the highest PI-RADS score identified on MRI.")
-    dre = st.radio("DRE", ["Normal", "Abnormal"])
+    # GROUP 1: PATIENT HISTORY
+    st.header("👤 Patient History")
+    age = st.number_input("Age (years)", 40, 95, 65, help="Range: 55-75")
     fam = st.radio("Family History", ["No", "Yes", "Unknown"])
     biopsy = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"])
+    
+    st.divider()
+    
+    # GROUP 2: CLINICAL & IMAGING MARKERS
+    st.header("🏥 Clinical & Imaging Findings")
+    psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5, help="Range: 0.4-50.0")
+    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, help="Range: 10-110")
+    dre = st.radio("DRE", ["Normal", "Abnormal"])
+    pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1, 
+                          help="Highest score on MRI")
 
 # ==========================================
 # 4. PREDICTION LOGIC
