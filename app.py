@@ -68,7 +68,7 @@ with st.sidebar:
     st.header("📋 Patient Data")
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1)
-    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, step=1)
+    vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     st.divider()
     dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
