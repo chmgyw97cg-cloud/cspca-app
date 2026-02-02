@@ -26,39 +26,26 @@ def load_prediction_system():
 
 try:
     data_packet = load_prediction_system()
-    
-    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
-    
-    # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
-    
-    # --- LOAD WEIGHTS & INTERCEPTS ---
     meta_weights = data_packet.get("meta_weights")
     meta_intercept = data_packet.get("meta_intercept", 0.0) 
-    
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
+    
+    if meta_weights is None: st.error("❌ Error: Missing weights."); st.stop()
 
-    if meta_weights is None:
-        st.error("❌ Error: Missing 'meta_weights' in model file.")
-        st.stop()
-
-except FileNotFoundError:
-    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found.")
-    st.stop()
 except Exception as e:
-    st.error(f"❌ Error loading model: {e}")
-    st.stop()
+    st.error(f"❌ Critical Error: {e}"); st.stop()
 
 # ==========================================
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# --- HEADER & DEFINITIONS ---
+# --- HEADER ---
 st.markdown(f"**Standardized Stacking Ensemble** | Decision Threshold: **{THRESHOLD:.0%}**")
 st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is defined as **ISUP Grade Group ≥ 2** (Gleason Score ≥ 3+4).")
 st.caption("**Scope:** Prediction applies to **MRI-Targeted Biopsy (ROI-only)**.")
@@ -73,26 +60,9 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False)
 with st.sidebar:
     st.header("📋 Patient Data")
     
-    # --- 1. CALIBRATION SETTING (ROI-ONLY STANDARD) ---
-    st.subheader("🏥 Clinical Calibration")
-    st.caption("Standard for MRI-Targeted Biopsy (ROI):")
-    
-    # Mặc định là PRECISION (38%) vì khớp với ROI-only
-    calib_standard = st.selectbox(
-        "Reference Benchmark:",
-        ["PRECISION Trial (NEJM 2018)", "PROMIS Trial (Targeted Arm)"],
-        index=0,
-        help="Both trials show ~37-38% yield for csPCa when restricting biopsy to the ROI (Targeted Biopsy)."
-    )
-    
-    if calib_standard == "PRECISION Trial (NEJM 2018)":
-        DEFAULT_TARGET = 38.0
-        REF_SOURCE = "PRECISION Trial (Kasivisvanathan et al., NEJM 2018)"
-    else:
-        DEFAULT_TARGET = 37.0 # PROMIS Targeted Arm (Table S6)
-        REF_SOURCE = "PROMIS Trial (Ahmed et al., Lancet 2017 - Targeted Arm)"
-
-    st.divider()
+    # --- 1. FIXED CALIBRATION STANDARD ---
+    st.subheader("🏥 Calibration Standard")
+    st.info("**PRECISION Trial (NEJM 2018)**\n\nStandard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
     
     # --- 2. INPUTS ---
     age = st.number_input("Age (years)", 40, 95, 65)
@@ -105,29 +75,30 @@ with st.sidebar:
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
     
-    # --- 3. AUTO CALIBRATION ---
+    # --- 3. AUTO CALIBRATION LOGIC ---
     st.divider()
     with st.expander("⚙️ Calibration Details", expanded=True):
         
-        # Target Prevalence (Cho phép chỉnh nhẹ nhưng mặc định là 38%)
+        # Mặc định 38.0% theo PRECISION Trial
+        DEFAULT_TARGET = 38.0
+        
         local_prev_pct = st.number_input(
             "Target Yield within ROI (%):", 
             min_value=1.0, max_value=99.0, 
             value=DEFAULT_TARGET, 
-            step=0.5, format="%.1f"
+            step=0.5, format="%.1f",
+            help="Default: 38% based on Kasivisvanathan et al., NEJM 2018 (PRECISION Trial)."
         )
         
-        # Training Prevalence (DỮ LIỆU ROI CỦA BẠN - 1209 BN)
-        # Vì bài báo của bạn là ROI-only, con số 45.2% này phải là tỷ lệ dương tính trên ROI
+        # Training Prevalence (DỮ LIỆU CỦA BẠN)
         TRAIN_PREV = 0.452 
         
-        # Tính toán
+        # Tính toán Offset
         target_prev = local_prev_pct / 100.0
         def logit(p): return np.log(p / (1 - p))
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
         
-        st.info(f"✅ Calibrated: **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
-        st.caption(f"Ref: {REF_SOURCE}")
+        st.caption(f"**Adjustment:** {TRAIN_PREV:.1%} ➔ {local_prev_pct}%")
 
 # ==========================================
 # 4. PREDICTION LOGIC
@@ -146,8 +117,6 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     # 2. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
-    
-    # Tính toán PSA Density để dùng cho phần Recommendation
     psa_density = psa / vol
     
     input_dict = {
@@ -223,6 +192,10 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     c2.metric("Lower 95% CI", f"{low_ci:.1%}" if has_ci else "N/A")
     c3.metric("Upper 95% CI", f"{high_ci:.1%}" if has_ci else "N/A")
 
+    # --- CHÚ THÍCH KHOẢNG TIN CẬY (MÀU XANH) ---
+    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
+            f"Considering statistical uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
+
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         sns.set_theme(style="ticks", context="paper", font_scale=1.1)
@@ -238,7 +211,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Threshold: {GRAY_HIGH:.0%}")
 
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", y=1.02, fontsize=12, fontweight='bold', color='#333')
-        plt.title(f"Target Yield (ROI-only): {local_prev_pct:.1f}%", fontsize=9, color='#666', style='italic', pad=10)
+        plt.title(f"Target Yield (ROI-only): {local_prev_pct:.1f}% (Ref: PRECISION Trial)", fontsize=9, color='#666', style='italic', pad=10)
         
         ax.set_xlabel("Predicted Probability of csPCa"); ax.set_ylabel("Density")
         ax.set_xlim(0, max(0.6, high_ci + 0.15))
@@ -247,33 +220,33 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         st.pyplot(fig, dpi=300, use_container_width=False)
         sns.reset_orig()
 
-    # --- DETAILED CLINICAL RECOMMENDATION (FULL VERSION) ---
+    # --- DETAILED CLINICAL RECOMMENDATION ---
     st.subheader("💡 Clinical Recommendation")
-    
-    # Hiển thị PSAD để bác sĩ tham khảo
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
 
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The predicted risk exceeds the optimal biopsy threshold.
-        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
+        * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
+        * **Recommended Action:** * Proceed with **MRI-Targeted Biopsy**. 
+            * **Technique:** Ensure precise sampling of the ROI. Systematic biopsy may be added if clinically indicated.
         """)
     elif risk_mean >= GRAY_LOW:
+        # Tư vấn Gray Zone chi tiết
         st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
+        * **Interpretation:** Equivocal risk in the ROI.
+        * **Action:** Use **PSA Density (PSAD)** to stratify:
+            * **PSAD ≥ 0.15:** Favors Biopsy.
+            * **PSAD < 0.15:** Consider surveillance or ancillary tests (PHI, 4Kscore).
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** High Negative Predictive Value (NPV) in this setting.
-        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
+        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of significant cancer in the ROI is low.
+        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal.
+            * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
+            * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
         """)
     
-    st.info(f"**Standard Used:** {REF_SOURCE}. ({REF_DETAILS})")
-    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa).")
+    st.info("**Reference:** Kasivisvanathan V, et al. *MRI-Targeted or Standard Biopsy for Prostate-Cancer Diagnosis* (PRECISION Trial). NEJM 2018.")
