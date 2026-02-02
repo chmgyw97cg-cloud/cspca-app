@@ -1,3 +1,36 @@
+import streamlit as st
+import os
+
+# --- ĐOẠN CODE DEBUG (XÓA SAU KHI SỬA ĐƯỢC LỖI) ---
+st.error("🛑 ĐANG Ở CHẾ ĐỘ DEBUG")
+
+# 1. In ra thư mục hiện tại
+current_dir = os.getcwd()
+st.write(f"📂 Thư mục hiện tại: `{current_dir}`")
+
+# 2. Liệt kê tất cả các file đang có mặt tại đây
+files = os.listdir(current_dir)
+st.write("📄 Danh sách file trong thư mục này:", files)
+
+# 3. Kiểm tra file model có tồn tại không
+model_filename = "cspca_prediction_system.pkl"
+if model_filename in files:
+    size = os.path.getsize(model_filename)
+    st.success(f"✅ TÌM THẤY FILE: {model_filename} (Kích thước: {size/1024:.2f} KB)")
+else:
+    st.error(f"❌ KHÔNG THẤY FILE: {model_filename}")
+    
+# 4. Nếu file nằm trong thư mục con, in ra luôn
+st.write("--- Kiểm tra các thư mục con ---")
+for f in files:
+    if os.path.isdir(f) and not f.startswith("."): # Bỏ qua thư mục ẩn như .git
+        try:
+            sub_files = os.listdir(f)
+            st.write(f"📁 Trong thư mục `{f}` có: {sub_files}")
+        except:
+            pass
+st.stop() # Dừng app tại đây để bạn kịp xem
+# -----------------------------------------------
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
