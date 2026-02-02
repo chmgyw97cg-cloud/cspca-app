@@ -217,7 +217,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Threshold: {GRAY_HIGH:.0%}")
 
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", y=1.02, fontsize=12, fontweight='bold', color='#333')
-        plt.title(f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", fontsize=9, color='#666', style='italic', pad=10)
+        plt.title(f"Method: Kernel Density Estimation (n = 1,000 bootstrap iterations)", fontsize=9, color='#666', style='italic', pad=10)
         
         ax.set_xlabel("Predicted Probability of csPCa"); ax.set_ylabel("Density")
         ax.set_xlim(0, max(0.6, high_ci + 0.15))
