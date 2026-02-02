@@ -194,10 +194,10 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
 
     # --- CHÚ THÍCH XANH (GREEN NOTE) VỀ 95% CI ---
     ci_width = high_ci - low_ci
-    st.success(
+    st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
-        f"💡 **Note on Uncertainty:** The true risk lies between **{low_ci:.1%}** and **{high_ci:.1%}**. "
-        f"A **narrower interval** (currently {ci_width:.1%}) indicates **higher reliability** of the prediction for this specific patient."
+        f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**. "
+        f"**A narrower range implies higher certainty.**"
     )
 
     st.write("### 🔍 Uncertainty Visualization")
@@ -231,24 +231,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
-        * **Recommended Action:** * Proceed with **MRI-Targeted Biopsy**. 
-            * **Technique:** Ensure precise sampling of the ROI. Systematic biopsy may be added if clinically indicated.
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
         """)
     elif risk_mean >= GRAY_LOW:
-        # Tư vấn Gray Zone chi tiết
         st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
-        * **Interpretation:** Equivocal risk in the ROI.
-        * **Action:** Use **PSA Density (PSAD)** to stratify:
-            * **PSAD ≥ 0.15:** Favors Biopsy.
-            * **PSAD < 0.15:** Consider surveillance or ancillary tests (PHI, 4Kscore).
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of significant cancer in the ROI is low.
-        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal.
-            * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
-            * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
         """)
