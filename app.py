@@ -253,25 +253,27 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     # Hiển thị PSAD để bác sĩ tham khảo
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
 
-    st.subheader("💡 Clinical Recommendation")
-    
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
         * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** The predicted risk exceeds the optimal biopsy threshold.
         * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
         """)
     elif risk_mean >= GRAY_LOW:
         st.warning(f"""
         **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
         * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
         * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
         * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** High Negative Predictive Value (NPV) in this setting.
         * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
         """)
-
+    
+    st.info(f"**Standard Used:** {REF_SOURCE}. ({REF_DETAILS})")
     st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa).")
