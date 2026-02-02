@@ -47,7 +47,11 @@ st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 st.markdown("**Standardized Stacking Ensemble** | Clinical Decision Support")
 st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is defined as **ISUP Grade Group ≥ 2**.")
 st.caption("**Scope:** Prediction applies to **MRI-Targeted Biopsy (ROI-only)**.")
-
+with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
+    st.markdown("""
+    * **Age:** 55 – 75 years | PSA Level:** 0.4 – 50.0 ng/mL | Prostate Volume:** 10 – 110 mL | MRI Requirement:** PI-RADS Max Score ≥ 3.
+    """)
+    
 with st.sidebar:
     st.header("📋 Patient Data")
     
