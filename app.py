@@ -26,6 +26,8 @@ def load_prediction_system():
 
 try:
     data_packet = load_prediction_system()
+    
+    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
@@ -60,11 +62,7 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False)
 with st.sidebar:
     st.header("📋 Patient Data")
     
-    # --- 1. FIXED CALIBRATION STANDARD ---
-    st.subheader("🏥 Calibration Standard")
-    st.info("**PRECISION Trial (NEJM 2018)**\n\nStandard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
-    
-    # --- 2. INPUTS ---
+    # --- INPUTS ---
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1, format="%.1f")
     vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
@@ -75,9 +73,11 @@ with st.sidebar:
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
     
-    # --- 3. AUTO CALIBRATION LOGIC ---
+    # --- AUTO CALIBRATION LOGIC (GỌN GÀNG THEO YÊU CẦU) ---
     st.divider()
     with st.expander("⚙️ Calibration Details", expanded=True):
+        st.markdown("**Standard: PRECISION Trial**")
+        st.caption("Standard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
         
         # Mặc định 38.0% theo PRECISION Trial
         DEFAULT_TARGET = 38.0
@@ -86,9 +86,9 @@ with st.sidebar:
             "Target Yield within ROI (%):", 
             min_value=1.0, max_value=99.0, 
             value=DEFAULT_TARGET, 
-            step=0.5, format="%.1f",
-            help="Default: 38% based on Kasivisvanathan et al., NEJM 2018 (PRECISION Trial)."
+            step=0.5, format="%.1f"
         )
+        st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
         
         # Training Prevalence (DỮ LIỆU CỦA BẠN)
         TRAIN_PREV = 0.452 
@@ -98,7 +98,7 @@ with st.sidebar:
         def logit(p): return np.log(p / (1 - p))
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
         
-        st.caption(f"**Adjustment:** {TRAIN_PREV:.1%} ➔ {local_prev_pct}%")
+        st.info(f"✅ Adjusted: **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
 
 # ==========================================
 # 4. PREDICTION LOGIC
@@ -192,9 +192,13 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     c2.metric("Lower 95% CI", f"{low_ci:.1%}" if has_ci else "N/A")
     c3.metric("Upper 95% CI", f"{high_ci:.1%}" if has_ci else "N/A")
 
-    # --- CHÚ THÍCH KHOẢNG TIN CẬY (MÀU XANH) ---
-    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
-            f"Considering statistical uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
+    # --- CHÚ THÍCH XANH (GREEN NOTE) VỀ 95% CI ---
+    ci_width = high_ci - low_ci
+    st.success(
+        f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
+        f"💡 **Note on Uncertainty:** The true risk lies between **{low_ci:.1%}** and **{high_ci:.1%}**. "
+        f"A **narrower interval** (currently {ci_width:.1%}) indicates **higher reliability** of the prediction for this specific patient."
+    )
 
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
@@ -248,5 +252,3 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
             * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
             * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
         """)
-    
-    st.info("**Reference:** Kasivisvanathan V, et al. *MRI-Targeted or Standard Biopsy for Prostate-Cancer Diagnosis* (PRECISION Trial). NEJM 2018.")
