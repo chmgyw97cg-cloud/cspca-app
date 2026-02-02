@@ -23,7 +23,7 @@ st.markdown("""
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
-    return joblib.load("cspca_prediction_system_v2.pkl")
+    return joblib.load("cspca_prediction_system.pkl")
 
 try:
     packet = load_prediction_system()
