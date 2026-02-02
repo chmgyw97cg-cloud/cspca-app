@@ -62,7 +62,11 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False)
 with st.sidebar:
     st.header("📋 Patient Data")
     
-    # --- INPUTS ---
+    # --- 1. FIXED CALIBRATION STANDARD ---
+    st.subheader("🏥 Calibration Standard")
+    st.info("**PRECISION Trial (NEJM 2018)**\n\nStandard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
+    
+    # --- 2. INPUTS ---
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1, format="%.1f")
     vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
@@ -73,11 +77,9 @@ with st.sidebar:
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
     
-    # --- AUTO CALIBRATION LOGIC (GỌN GÀNG THEO YÊU CẦU) ---
+    # --- 3. AUTO CALIBRATION LOGIC ---
     st.divider()
     with st.expander("⚙️ Calibration Details", expanded=True):
-        st.markdown("**Standard: PRECISION Trial**")
-        st.caption("Standard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
         
         # Mặc định 38.0% theo PRECISION Trial
         DEFAULT_TARGET = 38.0
@@ -86,9 +88,9 @@ with st.sidebar:
             "Target Yield within ROI (%):", 
             min_value=1.0, max_value=99.0, 
             value=DEFAULT_TARGET, 
-            step=0.5, format="%.1f"
+            step=0.5, format="%.1f",
+            help="Default: 38% based on Kasivisvanathan et al., NEJM 2018 (PRECISION Trial)."
         )
-        st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
         
         # Training Prevalence (DỮ LIỆU CỦA BẠN)
         TRAIN_PREV = 0.452 
@@ -98,7 +100,7 @@ with st.sidebar:
         def logit(p): return np.log(p / (1 - p))
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
         
-        st.info(f"✅ Adjusted: **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
+        st.caption(f"**Adjustment:** {TRAIN_PREV:.1%} ➔ {local_prev_pct}%")
 
 # ==========================================
 # 4. PREDICTION LOGIC
@@ -192,11 +194,10 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     c2.metric("Lower 95% CI", f"{low_ci:.1%}" if has_ci else "N/A")
     c3.metric("Upper 95% CI", f"{high_ci:.1%}" if has_ci else "N/A")
 
-    # --- CHÚ THÍCH XANH (GREEN NOTE) VỀ 95% CI ---
-    ci_width = high_ci - low_ci
+    # --- CHÚ THÍCH MÀU XANH DƯƠNG NHẠT (INFO) ---
     st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
-        f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}** "
+        f"💡 **Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}** "
         f"(uncertainty spread: **{high_ci - low_ci:.1%}**). "
         f"**A narrower spread implies higher certainty.**"
     )
@@ -229,7 +230,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     st.subheader("💡 Clinical Recommendation")
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
 
-     if risk_mean >= GRAY_HIGH:
+    if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
         * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
