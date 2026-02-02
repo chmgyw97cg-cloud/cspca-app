@@ -194,7 +194,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
 
     # --- CHÚ THÍCH XANH (GREEN NOTE) VỀ 95% CI ---
     ci_width = high_ci - low_ci
-    st.success(
+    st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
         f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}** "
         f"(uncertainty spread: **{high_ci - low_ci:.1%}**). "
