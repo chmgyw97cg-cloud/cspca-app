@@ -21,34 +21,25 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
-    # Load the .pkl file located in the root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
-    
-    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
-    
-    # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
-    
-    # --- LOAD TRỌNG SỐ & INTERCEPT ---
     meta_weights = data_packet.get("meta_weights")
-    # Lấy Intercept (nếu không có thì mặc định là 0)
     meta_intercept = data_packet.get("meta_intercept", 0.0) 
-    
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
 
     if meta_weights is None:
-        st.error("❌ Error: Missing 'meta_weights' in model file.")
+        st.error("❌ Error: Missing 'meta_weights'.")
         st.stop()
 
 except FileNotFoundError:
-    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found.")
+    st.error("❌ Error: 'cspca_prediction_system.pkl' not found.")
     st.stop()
 except Exception as e:
     st.error(f"❌ Error loading model: {e}")
@@ -72,53 +63,61 @@ with st.sidebar:
     st.header("📋 Patient Data")
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1, format="%.1f")
-    # Volume: Cho phép nhập số thập phân
     vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
-    
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     st.divider()
     dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
+    
+    # -----------------------------------------------------------
+    # ⚙️ TÍNH NĂNG HIỆU CHỈNH THÔNG MINH (SMART CALIBRATION)
+    # -----------------------------------------------------------
+    st.divider()
+    with st.expander("⚙️ Calibration (Hiệu chỉnh Mô hình)", expanded=True):
+        st.caption("Để kết quả chính xác nhất, vui lòng nhập thông tin dịch tễ tại cơ sở của bạn.")
+        
+        # 1. Nhập tỷ lệ thực tế (User Input)
+        local_prev_pct = st.number_input(
+            "Tỷ lệ ung thư (csPCa) trung bình tại cơ sở của bạn (%):", 
+            min_value=1.0, max_value=80.0, value=15.0, step=0.5, format="%.1f",
+            help="Trong 100 bệnh nhân có chỉ định sinh thiết tại nơi bạn làm việc, trung bình có bao nhiêu người dương tính?"
+        )
+        
+        # 2. Định nghĩa tỷ lệ gốc của mô hình (Hardcoded từ tập Training)
+        # Giả sử tập train của bạn là bệnh viện tuyến cuối, tỷ lệ bệnh là 40% (0.40)
+        TRAIN_PREV = 0.40 
+        
+        # 3. Tính toán Offset tự động
+        target_prev = local_prev_pct / 100.0
+        
+        def logit(p): return np.log(p / (1 - p))
+        
+        # Công thức Bayes: Offset = Logit(Target) - Logit(Train)
+        CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
+        
+        # Hiển thị thông tin cho bác sĩ yên tâm
+        st.info(f"✅ Hệ thống đã tự động hiệu chỉnh.\n(Mức nền được điều chỉnh từ {TRAIN_PREV:.0%} xuống {target_prev:.1%})")
 
 # ==========================================
 # 4. PREDICTION LOGIC
 # ==========================================
 if st.button("🚀 RUN ANALYSIS", type="primary"):
     
-    # ---------------------------------------------------------
-    # 1. VALIDATION CHECK (KIỂM TRA TIÊU CHUẨN ĐẦU VÀO)
-    # ---------------------------------------------------------
+    # 1. VALIDATION CHECK
     warnings = []
-    
-    # Kiểm tra Tuổi (Khuyến cáo: 55 - 75)
-    if not (55 <= age <= 75):
-        warnings.append(f"⚠️ **Age ({age})** is outside the validation range (55-75 years).")
-        
-    # Kiểm tra PSA (Khuyến cáo: 0.4 - 50.0)
-    if not (0.4 <= psa <= 50.0):
-        warnings.append(f"⚠️ **PSA ({psa} ng/mL)** is outside the validation range (0.4-50.0 ng/mL).")
-        
-    # Kiểm tra Thể tích (Khuyến cáo: 10 - 110)
-    if not (10 <= vol <= 110):
-        warnings.append(f"⚠️ **Prostate Volume ({vol} mL)** is outside the validation range (10-110 mL).")
+    if not (55 <= age <= 75): warnings.append(f"⚠️ **Age ({age})** outside 55-75.")
+    if not (0.4 <= psa <= 50.0): warnings.append(f"⚠️ **PSA ({psa})** outside 0.4-50.0.")
+    if not (10 <= vol <= 110): warnings.append(f"⚠️ **Vol ({vol})** outside 10-110.")
 
-    # Nếu có cảnh báo, hiển thị ngay đầu trang kết quả
     if warnings:
         with st.warning("### ⚠️ Clinical Warning: Out of Distribution"):
-            st.write("The patient's data falls outside the model's inclusion criteria. Results should be interpreted with caution.")
-            for w in warnings:
-                st.markdown(f"* {w}")
+            for w in warnings: st.markdown(f"* {w}")
 
-    # ---------------------------------------------------------
-    # 2. XỬ LÝ VÀ DỰ BÁO
-    # ---------------------------------------------------------
-    
-    # --- A. Pre-processing ---
+    # 2. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     
-    # Input Dictionary Mapping
     input_dict = {
         "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
         "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0], 
@@ -130,206 +129,109 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
     
-    # --- B. Spline Logic (Robust Fix) ---
+    # Spline Logic
     try:
-        # Define safety bounds to prevent Patsy errors
         safe_lb = min(knots) - 5.0
         safe_ub = max(knots) + 5.0
-        
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
-        spline_df = dmatrix(spline_formula, 
-                           {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, 
-                           return_type="dataframe")
+        spline_df = dmatrix(spline_formula, {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, return_type="dataframe")
         
-        # Rename columns to match training data
         rename_map = {}
         for col in spline_df.columns:
             if "Intercept" in col: continue
             match = re.search(r"\[(\d+)\]$", col)
-            if match:
-                idx = match.group(1)
-                original_name = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
-                rename_map[col] = original_name
+            if match: rename_map[col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{match.group(1)}]"
         spline_df = spline_df.rename(columns=rename_map)
-
-        # Add Intercept if required by Lasso
-        if "Intercept" not in spline_df.columns:
-            spline_df["Intercept"] = 1.0
-            
+        if "Intercept" not in spline_df.columns: spline_df["Intercept"] = 1.0
         df_full = pd.concat([df_input, spline_df], axis=1)
-
     except Exception as e:
-        st.error(f"Spline Processing Error: {e}")
+        st.error(f"Spline Error: {e}")
         st.stop()
 
-    # --- C. Prediction Loop ---
+    # 3. INFERENCE
     base_preds = []
-    model_names = list(base_models.keys())
-    
-    for name in model_names:
+    for name in list(base_models.keys()):
         model = base_models[name]
-        
-        # Feature selection
-        if name in feature_mapping:
-            required_cols = feature_mapping[name]
-        else:
-            required_cols = df_full.columns.tolist()
-            
-        # Check missing columns
-        missing = [c for c in required_cols if c not in df_full.columns]
-        if missing:
-            st.error(f"❌ Model '{name}' missing columns: {missing}")
-            st.stop()
-            
-        # Inference
+        cols = feature_mapping.get(name, df_full.columns.tolist())
         try:
-            X_subset = df_full[required_cols]
-            if hasattr(model, "predict_proba"):
-                p = model.predict_proba(X_subset)[:, 1][0]
-            else:
-                p = model.predict(X_subset)[0]
+            p = model.predict_proba(df_full[cols])[:, 1][0] if hasattr(model, "predict_proba") else model.predict(df_full[cols])[0]
             base_preds.append(p)
-        except Exception as e:
-            st.error(f"Error running model '{name}': {e}")
-            st.stop()
+        except: st.error(f"Error in {name}"); st.stop()
     
     base_preds = np.array(base_preds)
     
-    # --- D. Meta-Prediction (LOGIC CHUẨN: SIGMOID + INTERCEPT) ---
+    # 4. META-PREDICTION (WITH AUTO CALIBRATION)
+    raw_log_odds = np.dot(base_preds, meta_weights) + meta_intercept
     
-    # 1. Tính Log-odds (Linear combination: w*x + b)
-    log_odds = np.dot(base_preds, meta_weights) + meta_intercept
+    # --- ÁP DỤNG OFFSET TỰ ĐỘNG ---
+    final_log_odds = raw_log_odds + CALIBRATION_OFFSET
+    risk_mean = 1 / (1 + np.exp(-final_log_odds))
     
-    # 2. Chuyển sang Xác suất (Sigmoid): P = 1 / (1 + e^-z)
-    risk_mean = 1 / (1 + np.exp(-log_odds))
-    
-    # 3. Bootstrap Uncertainty (Cũng dùng Sigmoid)
     if bootstrap_weights is not None:
         boot_log_odds = np.dot(bootstrap_weights, base_preds)
+        if bootstrap_intercepts is not None: boot_log_odds += bootstrap_intercepts
         
-        if bootstrap_intercepts is not None:
-            boot_log_odds += bootstrap_intercepts
-            
+        # Calibration cho bootstrap
+        boot_log_odds += CALIBRATION_OFFSET
+        
         boot_preds = 1 / (1 + np.exp(-boot_log_odds))
-        
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
     else:
         low_ci, high_ci = risk_mean, risk_mean
         has_ci = False
 
-    # ==========================================
-    # 5. OUTPUT DISPLAY (SCIENTIFIC VERSION)
-    # ==========================================
+    # 5. DISPLAY
     st.divider()
     st.subheader("📊 Quantitative Assessment")
 
-    # 1. Define Clinical Thresholds
-    GRAY_LOW = 0.10        # < 10%: Safety Net
-    GRAY_HIGH = THRESHOLD  # >= 20%: Biopsy Threshold
+    GRAY_LOW = 0.10
+    GRAY_HIGH = THRESHOLD
 
-    # 2. Determine Labels
     if risk_mean < GRAY_LOW:
-        risk_label = "Low Risk"
-        delta_color = "normal" 
+        risk_label = "Low Risk"; delta_color = "normal" 
     elif risk_mean < GRAY_HIGH:
-        risk_label = "Intermediate Risk (Gray Zone)"
-        delta_color = "off"
+        risk_label = "Intermediate Risk (Gray Zone)"; delta_color = "off"
     else:
-        risk_label = "High Risk"
-        delta_color = "inverse"
+        risk_label = "High Risk"; delta_color = "inverse"
 
-    # 3. Display Metrics
     c1, c2, c3 = st.columns(3)
     c1.metric("Predicted Risk", f"{risk_mean:.1%}", delta=risk_label, delta_color=delta_color)
+    c2.metric("Lower 95% CI", f"{low_ci:.1%}" if has_ci else "N/A")
+    c3.metric("Upper 95% CI", f"{high_ci:.1%}" if has_ci else "N/A")
 
-    if has_ci:
-        c2.metric("Lower 95% CI", f"{low_ci:.1%}")
-        c3.metric("Upper 95% CI", f"{high_ci:.1%}")
-    else:
-        c2.metric("Lower 95% CI", "N/A")
-        c3.metric("Upper 95% CI", "N/A")
-
-    # 4. Uncertainty Visualization (Nature Style - Optimized Colors)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
-        # Use 'ticks' style for clean, minimalist look
         sns.set_theme(style="ticks", context="paper", font_scale=1.1)
-        
-        # Hình nhỏ gọn (8x3 inch)
         fig, ax = plt.subplots(figsize=(8, 3))
-
-        # --- BẢNG MÀU TỐI ƯU (GREEN - ORANGE - RED) ---
-        # 1. Low Risk: Xanh Lá Chuẩn (#28a745)
-        color_low = '#28a745'  
-        # 2. Intermediate: Cam (#fd7e14)
-        color_mid = '#fd7e14'  
-        # 3. High: Đỏ (#dc3545)
-        color_high = '#dc3545' 
         
-        # Background Zones
-        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.15, label='Low Risk Zone', lw=0)
-        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.15, label='Intermediate Zone', lw=0)
-        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.1, label='High Risk Zone', lw=0)
+        color_low, color_mid, color_high = '#28a745', '#fd7e14', '#dc3545'
+        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.15, label='Low Risk', lw=0)
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.15, label='Intermediate', lw=0)
+        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.1, label='High Risk', lw=0)
 
-        # Density Plot
         sns.kdeplot(boot_preds, fill=True, color="#2c3e50", alpha=0.4, ax=ax, linewidth=1.5)
-        
-        # Indicator Lines
-        ax.axvline(risk_mean, color="#d95f02", linestyle="-", linewidth=2, label=f"Mean Prediction: {risk_mean:.1%}")
-        ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Biopsy Threshold: {GRAY_HIGH:.0%}")
+        ax.axvline(risk_mean, color="#d95f02", linestyle="-", linewidth=2, label=f"Mean: {risk_mean:.1%}")
+        ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Threshold: {GRAY_HIGH:.0%}")
 
-        # Titles
-        n_boot = len(bootstrap_weights) if bootstrap_weights is not None else 0
-        plt.suptitle("Estimated Risk Distribution & Confidence Intervals", 
-                     y=1.02, fontsize=12, fontweight='bold', color='#333')
-        plt.title(f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
-                  fontsize=9, color='#666', style='italic', pad=10)
-
-        # Axis
-        ax.set_xlabel("Predicted Probability of csPCa", labelpad=5)
-        ax.set_ylabel("Density (Bootstrap)", labelpad=5)
+        plt.suptitle("Estimated Risk Distribution & Confidence Intervals", y=1.02, fontsize=12, fontweight='bold', color='#333')
+        # Chú thích rõ ràng cho bác sĩ hiểu biểu đồ đang vẽ theo tỷ lệ nào
+        plt.title(f"Calibrated to {local_prev_pct:.1f}% Prevalence (n={len(bootstrap_weights)})", fontsize=9, color='#666', style='italic', pad=10)
         
-        # Limits
-        x_max = max(0.6, high_ci + 0.15)
-        ax.set_xlim(0, x_max)
-        
-        # Legend
-        ax.legend(loc='best', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
-        
-        # Despine
+        ax.set_xlabel("Predicted Probability of csPCa"); ax.set_ylabel("Density")
+        ax.set_xlim(0, max(0.6, high_ci + 0.15))
+        ax.legend(loc='best', fontsize=8, framealpha=0.95)
         sns.despine(offset=5, trim=True)
-        
-        # Render
         st.pyplot(fig, dpi=300, use_container_width=False)
-        
-        sns.reset_orig() # Reset theme
+        sns.reset_orig()
 
-    # 5. Clinical Recommendation (3 Levels)
     st.subheader("💡 Clinical Recommendation")
-    
     if risk_mean >= GRAY_HIGH:
-        st.error(f"""
-        **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The risk exceeds the optimal decision threshold.
-        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
-        """)
+        st.error(f"**🔴 HIGH RISK**: Strong indication for **Targeted Biopsy**.")
     elif risk_mean >= GRAY_LOW:
-        st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., PSA Density, Free/Total PSA) before deciding on biopsy.
-        """)
+        st.warning(f"**🟡 INTERMEDIATE RISK**: Consider **Shared Decision Making** & secondary markers.")
     else:
-        st.success(f"""
-        **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** High Negative Predictive Value (NPV).
-        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
-        """)
-
-    # Footer
-    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
-            f"Considering model uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
+        st.success(f"**🟢 LOW RISK**: Biopsy may be avoided. Continue **PSA Monitoring**.")
+    
+    # Footer giải thích
+    st.info(f"**Note:** Model results have been calibrated to match your facility's local prevalence of **{local_prev_pct}%**.")
