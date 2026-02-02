@@ -158,9 +158,9 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
 
     st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
-        f"**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% Confidence Interval is **{low_ci:.1%}** to **{high_ci:.1%}** "
-        f"(uncertainty spread: **{high_ci - low_ci:.1%}**).\n\n"
-        f"A narrower distribution reflects higher model confidence."
+        f"**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% CI is **{low_ci:.1%}** to **{high_ci:.1%}** "
+        f"(uncertainty spread: **{high_ci - low_ci:.1%}**)."
+        f" A narrower distribution reflects higher model confidence."
     )
 
     # --- UNCERTAINTY VISUALIZATION (CLEANED) ---
