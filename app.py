@@ -12,7 +12,7 @@ import seaborn as sns
 st.set_page_config(
     page_title="csPCa Risk Assistant", 
     page_icon="⚕️",
-    layout="wide" # Dùng wide layout cho đẹp
+    layout="wide"
 )
 
 # ==========================================
@@ -20,28 +20,28 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
-    # Load file nằm cùng thư mục
+    # Load the .pkl file located in the same root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
     
-    # Lấy dữ liệu từ file pkl (Logic Mới: Dùng Trọng số/Weights)
+    # Unpack data
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
     THRESHOLD = data_packet.get("threshold", 0.2)
     
-    # QUAN TRỌNG: Lấy trọng số (Weights)
+    # Retrieve Weights (Crucial for Meta-stacking)
     meta_weights = data_packet.get("meta_weights")
     bootstrap_weights = data_packet.get("bootstrap_weights")
 
     if meta_weights is None:
-        st.error("❌ Lỗi: File model cũ. Hãy upload file .pkl mới nhất chứa 'meta_weights'.")
+        st.error("❌ Error: Model file is outdated. Please re-export the .pkl file containing 'meta_weights'.")
         st.stop()
 
 except FileNotFoundError:
-    st.error("❌ Critical Error: Không tìm thấy file 'cspca_prediction_system.pkl'. Hãy upload file này lên GitHub cùng cấp với app.py.")
+    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found. Please ensure it is in the root directory of your GitHub repo.")
     st.stop()
 except Exception as e:
     st.error(f"❌ Error loading model: {e}")
@@ -66,13 +66,16 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False)
 with st.sidebar:
     st.header("📋 Patient Data")
     
+    # Numeric Inputs
     age = st.number_input("Age (years)", 40, 95, 65)
-    psa = st.number_input("PSA (ng/mL)", 0.1, 200.0, 7.5)
-    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45)
+    psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1)
+    vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, step=1)
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     
     st.divider()
-    dre_opt = st.radio("DRE Findings", ["Normal", "Abnormal"], horizontal=True)
+    
+    # Categorical Inputs
+    dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
 
@@ -85,34 +88,61 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     
-    # Mapping inputs
+    # Create Input DataFrame (Mapping user input to model features)
     input_dict = {
         "age": [age],
         "PSA": [psa],
         "log_PSA": [log_psa_val],
         "log_vol": [log_vol_val],
         "pirads_max": [pirads],
+        
+        # Binary/One-Hot mappings
         "tr_yes": [1 if dre_opt == "Abnormal" else 0],
         "fam_yes": [1 if fam_opt == "Yes" else 0],
         "atcd_yes": [1 if biopsy_opt == "Prior Negative" else 0],
+        
+        # Label encoded mappings (for Trees)
         "tr": [1 if dre_opt == "Abnormal" else 0],
         "fam": [1 if fam_opt == "Yes" else (2 if fam_opt == "Unknown" else 0)],
         "atcd": [1 if biopsy_opt == "Prior Negative" else 0],
+        
+        # 'Unknown' columns
         "fam_unknown": [1 if fam_opt == "Unknown" else 0],
         "tr_unknown": [0],
         "atcd_unknown": [0]
     }
     df_input = pd.DataFrame(input_dict)
     
-    # --- B. Spline Logic ---
+    # --- B. Spline Logic (CRITICAL FIX APPLIED) ---
     try:
-        spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False)"
-        spline_df = dmatrix(spline_formula, {"log_PSA": df_input["log_PSA"], "knots": knots}, return_type="dataframe")
+        # Define explicit bounds based on the model's knots
+        # This prevents the "value falls below lower bound" error
+        safe_lower_bound = min(knots) - 5.0
+        safe_upper_bound = max(knots) + 5.0
+        
+        # Use 'lb' and 'ub' in the patsy formula
+        spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
+        
+        spline_df = dmatrix(
+            spline_formula, 
+            {
+                "log_PSA": df_input["log_PSA"], 
+                "knots": knots,
+                "lb": safe_lower_bound,
+                "ub": safe_upper_bound
+            }, 
+            return_type="dataframe"
+        )
+        
+        # Drop intercept if present
         if "Intercept" in spline_df.columns:
             spline_df = spline_df.drop(columns=["Intercept"])
+            
+        # Combine features
         df_full = pd.concat([df_input, spline_df], axis=1)
+
     except Exception as e:
-        st.error(f"Spline Error: {e}")
+        st.error(f"Spline Calculation Error: {e}")
         st.stop()
 
     # --- C. Prediction Loop ---
@@ -121,13 +151,14 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     for name in model_names:
         model = base_models[name]
-        # Lấy cột features tương ứng nếu có mapping
+        
+        # Select correct columns for this specific model
         if name in feature_mapping:
             required_cols = feature_mapping[name]
         else:
             required_cols = df_full.columns.tolist() # Fallback
             
-        # Kiểm tra cột thiếu
+        # Check for missing columns
         missing = [c for c in required_cols if c not in df_full.columns]
         if missing:
             st.error(f"Model '{name}' missing columns: {missing}")
@@ -135,17 +166,23 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
             
         # Predict
         X_subset = df_full[required_cols]
-        if hasattr(model, "predict_proba"):
-            p = model.predict_proba(X_subset)[:, 1][0]
-        else:
-            p = model.predict(X_subset)[0]
-        base_preds.append(p)
+        try:
+            if hasattr(model, "predict_proba"):
+                p = model.predict_proba(X_subset)[:, 1][0]
+            else:
+                p = model.predict(X_subset)[0]
+            base_preds.append(p)
+        except Exception as e:
+            st.error(f"Error running model '{name}': {e}")
+            st.stop()
     
     base_preds = np.array(base_preds)
 
     # --- D. Meta-Prediction (Weighted Average) ---
+    # Dot product of predictions and meta-weights
     risk_mean = np.dot(base_preds, meta_weights)
     
+    # Calculate Confidence Intervals using Bootstrap Weights
     if bootstrap_weights is not None:
         boot_preds = np.dot(bootstrap_weights, base_preds)
         low_ci = np.percentile(boot_preds, 2.5)
@@ -176,21 +213,23 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         fig, ax = plt.subplots(figsize=(10, 3))
-        # Vẽ phân phối (Density plot)
+        
+        # Density plot
         sns.kdeplot(boot_preds, fill=True, color="skyblue", alpha=0.3, ax=ax, label="Bootstrap Distribution")
         
-        # Vẽ các đường chỉ báo
+        # Indicators
         ax.axvline(risk_mean, color="red", linestyle="-", linewidth=2, label=f"Mean Risk ({risk_mean:.1%})")
         ax.axvline(THRESHOLD, color="black", linestyle="--", linewidth=1.5, label=f"Biopsy Threshold ({THRESHOLD:.0%})")
         
-        # Vùng tin cậy
+        # Confidence Interval Area
         ax.axvspan(low_ci, high_ci, color='gray', alpha=0.1, label='95% Confidence Interval')
         
         ax.set_title("Risk Probability Distribution (Uncertainty Analysis)")
-        ax.set_xlabel("Predicted Probability")
+        ax.set_xlabel("Predicted Probability of csPCa")
         ax.set_xlim(0, 1)
         ax.legend()
         st.pyplot(fig)
 
-    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa. "
-            f"Considering uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
+    # Text Interpretation
+    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
+            f"Considering model uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
