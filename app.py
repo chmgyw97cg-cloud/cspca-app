@@ -70,9 +70,10 @@ with st.sidebar:
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
     
     st.divider()
-    dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
+    # UPDATED: Added "Unknown" option
+    dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal", "Unknown"], horizontal=True)
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
-    biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
+    biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
     
     # --- AUTO CALIBRATION LOGIC (GỌN GÀNG THEO YÊU CẦU) ---
     st.divider()
