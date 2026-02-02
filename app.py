@@ -210,15 +210,31 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         high_ci = risk_mean
         has_ci = False
 
-    # ==========================================
-    # 5. OUTPUT DISPLAY
+  # ==========================================
+    # 5. OUTPUT DISPLAY (FINAL ENGLISH VERSION)
     # ==========================================
     st.divider()
     st.subheader("📊 Quantitative Assessment")
-    
+
+    # 1. Define Clinical Thresholds
+    GRAY_LOW = 0.10        # < 10%: Safety Net (High NPV)
+    GRAY_HIGH = THRESHOLD  # >= 20%: Optimal Biopsy Threshold (DCA)
+
+    # 2. Determine Labels and Colors
+    if risk_mean < GRAY_LOW:
+        risk_label = "Low Risk"
+        delta_color = "normal" 
+    elif risk_mean < GRAY_HIGH:
+        risk_label = "Intermediate Risk (Gray Zone)"
+        delta_color = "off" # Neutral color
+    else:
+        risk_label = "High Risk"
+        delta_color = "inverse" # Red highlighting
+
+    # 3. Display Metrics
     c1, c2, c3 = st.columns(3)
-    c1.metric("Predicted Risk", f"{risk_mean:.1%}", delta="High Risk" if risk_mean > THRESHOLD else "Low Risk", delta_color="inverse")
-    
+    c1.metric("Predicted Risk", f"{risk_mean:.1%}", delta=risk_label, delta_color=delta_color)
+
     if has_ci:
         c2.metric("Lower 95% CI", f"{low_ci:.1%}")
         c3.metric("Upper 95% CI", f"{high_ci:.1%}")
@@ -226,26 +242,91 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         c2.metric("Lower 95% CI", "N/A")
         c3.metric("Upper 95% CI", "N/A")
 
-    # Visual Chart
+    # 4. Visual Clinical Risk Scale (HTML/CSS)
+    st.write("### 🚦 Clinical Risk Scale")
+    
+    # Bar Color Logic
+    if risk_mean < GRAY_LOW:
+        bar_color = "#28a745" # Green
+    elif risk_mean < GRAY_HIGH:
+        bar_color = "#ffc107" # Amber/Yellow
+    else:
+        bar_color = "#dc3545" # Red
+
+    bar_width = min(int(risk_mean * 100), 100)
+    
+    # Custom HTML Progress Bar
+    st.markdown(f"""
+    <div style="background-color: #e9ecef; border-radius: 10px; padding: 5px; position: relative; margin-bottom: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+        <div style="position: absolute; left: {GRAY_LOW*100}%; top: 0; bottom: 0; border-left: 2px dashed #6c757d; opacity: 0.6;" title="Start of Gray Zone (10%)"></div>
+        <div style="position: absolute; left: {GRAY_HIGH*100}%; top: 0; bottom: 0; border-left: 3px solid #343a40;" title="Biopsy Threshold ({GRAY_HIGH:.0%})"></div>
+        
+        <div style="width: {bar_width}%; background-color: {bar_color}; height: 30px; border-radius: 6px; 
+                    text-align: right; padding-right: 10px; color: white; font-weight: bold; line-height: 30px; 
+                    transition: width 0.6s ease; text-shadow: 0px 0px 2px rgba(0,0,0,0.5);">
+            {risk_mean:.1%}
+        </div>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #6c757d; font-family: sans-serif;">
+        <span>0%</span>
+        <span style="text-align: center;">Gray Zone<br>({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})</span>
+        <span style="font-weight: bold; color: #343a40;">Biopsy Threshold<br>({GRAY_HIGH:.0%})</span>
+        <span>100%</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 5. Uncertainty Visualization (Matplotlib)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         fig, ax = plt.subplots(figsize=(10, 3))
         
-        # Density plot
-        sns.kdeplot(boot_preds, fill=True, color="skyblue", alpha=0.3, ax=ax, label="Bootstrap Distribution")
+        # Background Zones
+        ax.axvspan(0, GRAY_LOW, color='green', alpha=0.05, label='Low Risk Zone')
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color='orange', alpha=0.1, label='Intermediate Zone')
+        ax.axvspan(GRAY_HIGH, 1.0, color='red', alpha=0.05, label='High Risk Zone')
+
+        # Density Plot
+        sns.kdeplot(boot_preds, fill=True, color="#007bff", alpha=0.4, ax=ax, linewidth=1.5)
         
-        # Indicators
-        ax.axvline(risk_mean, color="red", linestyle="-", linewidth=2, label=f"Mean Risk ({risk_mean:.1%})")
-        ax.axvline(THRESHOLD, color="black", linestyle="--", linewidth=1.5, label=f"Biopsy Threshold ({THRESHOLD:.0%})")
+        # Mean Line
+        ax.axvline(risk_mean, color="#d63384", linestyle="-", linewidth=2.5, label=f"Mean Risk: {risk_mean:.1%}")
         
-        # Confidence Interval Area
-        ax.axvspan(low_ci, high_ci, color='gray', alpha=0.1, label='95% Confidence Interval')
+        # Threshold Line
+        ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.5, label=f"Threshold: {GRAY_HIGH:.0%}")
+
+        # Formatting
+        ax.set_title("Probability Distribution (1,000 Bootstrap Models)", fontsize=10)
+        ax.set_xlabel("Predicted Probability of csPCa", fontsize=9)
+        ax.set_yticks([]) # Hide y-axis for cleaner look
+        ax.set_xlim(0, max(0.6, high_ci + 0.1))
+        ax.legend(loc='upper right', fontsize='small', frameon=True)
         
-        ax.set_title("Risk Probability Distribution (Uncertainty Analysis)")
-        ax.set_xlabel("Predicted Probability of csPCa")
-        ax.set_xlim(0, 1)
-        ax.legend()
         st.pyplot(fig)
+
+    # 6. Clinical Recommendation (Three Levels)
+    st.subheader("💡 Clinical Recommendation")
+    
+    if risk_mean >= GRAY_HIGH:
+        st.error(f"""
+        **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** The risk exceeds the optimal decision threshold.
+        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
+        """)
+    elif risk_mean >= GRAY_LOW:
+        st.warning(f"""
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
+        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., PSA Density, Free/Total PSA ratio) before biopsying.
+        """)
+    else:
+        st.success(f"""
+        **🟢 LOW RISK (< {GRAY_LOW:.0%})**
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Interpretation:** High Negative Predictive Value (NPV).
+        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring** (6-12 months).
+        """)
 
     # Text Interpretation
     st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
