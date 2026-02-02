@@ -253,31 +253,25 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     # Hiển thị PSAD để bác sĩ tham khảo
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
 
+    st.subheader("💡 Clinical Recommendation")
+    
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
-        * **Recommended Action:** * Proceed with **MRI-Targeted Biopsy**. 
-            * **Technique:** Ensure precise sampling of the ROI. Systematic biopsy may be added if clinically indicated (e.g. multifocal MRI lesions).
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
         """)
     elif risk_mean >= GRAY_LOW:
-        # Tư vấn Gray Zone chi tiết
-        psad_note = "High" if psa_density >= 0.15 else "Low"
         st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
-        * **Interpretation:** Diagnostic uncertainty exists. The risk of csPCa is elevated but not definitive.
-        * **Clinical Nuance:** * Check **PSA Density (PSAD)**: Your patient's PSAD is **{psa_density:.2f}**. (Generally, PSAD ≥ 0.15 increases risk).
-            * Consider **Shared Decision Making (SDM)** regarding the benefits and risks of biopsy.
-        * **Recommended Action:** * If **PSAD ≥ 0.15** or **PI-RADS 4/5**: Biopsy is strongly favored.
-            * If **PSAD < 0.15** and **PI-RADS 3**: Consider ancillary testing (e.g., PHI, 4Kscore) or short-interval PSA monitoring (3-6 months).
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of significant cancer in the ROI is low.
-        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal.
-            * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
-            * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
+        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
+        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
         """)
-    
-    st.info(f"**Standard Used:** {REF_SOURCE}. ({REF_DETAILS})")
+
+    st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa).")
