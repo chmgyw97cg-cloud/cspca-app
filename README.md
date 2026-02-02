@@ -66,12 +66,12 @@ undergoing MRI-targeted biopsy and is not validated for screening or systematic 
 
 7. Intellectual Property & Compliance
 
-Copyright: © 2026 Tran Trung Thanh. All rights reserved.
+Copyright: © 2026 The Authors. All rights reserved.
 
 Methodology: This system integrates a meta-stacking ensemble optimized via Differential Evolution, a Bootstrap-based Uncertainty Engine, and a Logit-offset Calibration module aligned with the PRECISION Trial benchmark.
 
 Registry: This work is part of an internally registered clinical decision support research framework.
 
-How to Cite: Tran, T. T. (2026). csPCa Risk Assistant: A Meta-stacking Ensemble and Uncertainty-Aware Framework for ROI-Targeted Prostate Biopsy Decision Support. GitHub Repository.
+How to Cite: The Authors (2026). csPCa Risk Assistant: A Meta-stacking Ensemble and Uncertainty-Aware Framework for ROI-Targeted Prostate Biopsy Decision Support. GitHub Repository.
 
 Disclaimer: For Research and Educational purposes. Always prioritize clinical findings (DRE, PSAD) in conjunction with these estimates. This tool is not a certified medical device and should not be used as a sole basis for clinical decisions.
