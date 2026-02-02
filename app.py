@@ -204,13 +204,15 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         c2.metric("Lower 95% CI", "N/A")
         c3.metric("Upper 95% CI", "N/A")
 
-    # 4. Uncertainty Visualization (Scientific 2D Style)
+   # 4. Uncertainty Visualization (Scientific 2D Style - SHARPER & COMPACT)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         # Use a clean, scientific white theme (2D flat look)
         sns.set_theme(style="white", rc={"axes.grid": True, "grid.color": ".9", "axes.edgecolor": ".3"})
         
-        fig, ax = plt.subplots(figsize=(10, 4.5))
+        # --- THAY ĐỔI 1: GIẢM CHIỀU CAO ---
+        # figsize=(width, height). Giảm height từ 4.5 xuống 3.5
+        fig, ax = plt.subplots(figsize=(10, 3.5))
 
         # Background Zones (Flat 2D)
         ax.axvspan(0, GRAY_LOW, color='#28a745', alpha=0.08, label='Low Risk Zone', lw=0)
@@ -225,17 +227,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.5, label=f"Biopsy Threshold: {GRAY_HIGH:.0%}")
 
         # Titles and Subtitles (The Solution for n=1000)
-        ax.text(x=0.5, y=1.08, s="Estimated Risk Distribution & Confidence Intervals", 
+        # Tăng tọa độ y lên một chút (1.12 và 1.04) để tránh bị sát vào biểu đồ khi chiều cao giảm
+        ax.text(x=0.5, y=1.12, s="Estimated Risk Distribution & Confidence Intervals", 
                 transform=ax.transAxes, ha='center', fontsize=12, fontweight='bold', color='#333')
         
         # Subtitle containing the bootstrap count
         n_boot = len(bootstrap_weights) if bootstrap_weights is not None else 0
-        ax.text(x=0.5, y=1.02, s=f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
+        ax.text(x=0.5, y=1.04, s=f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
                 transform=ax.transAxes, ha='center', fontsize=9, color='#666', style='italic')
 
         # Axis Formatting
-        ax.set_xlabel("Predicted Probability of csPCa", fontsize=10, labelpad=10)
-        ax.set_ylabel("Density", fontsize=10, labelpad=10)
+        ax.set_xlabel("Predicted Probability of csPCa", fontsize=10, labelpad=8)
+        ax.set_ylabel("Density", fontsize=10, labelpad=8)
         
         # Set X-axis limit
         x_max = max(0.6, high_ci + 0.15)
@@ -247,9 +250,12 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         # Despine for scientific look
         sns.despine(left=False, bottom=False, top=True, right=True)
         
-        st.pyplot(fig)
+        # --- THAY ĐỔI 2: TĂNG ĐỘ NÉT (DPI) ---
+        # Thêm dpi=300 để hình ảnh sắc nét chất lượng cao
+        # use_container_width=True giúp hình tự động co giãn vừa khung
+        st.pyplot(fig, dpi=300, use_container_width=True)
+        
         sns.reset_orig() # Reset theme
-
     # 5. Clinical Recommendation (3 Levels)
     st.subheader("💡 Clinical Recommendation")
     
