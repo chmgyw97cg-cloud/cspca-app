@@ -89,7 +89,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
     
-    # --- B. Spline Logic (Safety Fix + Renaming) ---
+    # --- B. Spline Logic ---
     try:
         safe_lb = min(knots) - 5.0
         safe_ub = max(knots) + 5.0
@@ -98,7 +98,6 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
                            {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, 
                            return_type="dataframe")
         
-        # Regex renaming
         rename_map = {}
         for col in spline_df.columns:
             if "Intercept" in col: continue
@@ -159,7 +158,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         has_ci = False
 
     # ==========================================
-    # 5. OUTPUT DISPLAY (CLEAN VERSION)
+    # 5. OUTPUT DISPLAY (IMPROVED PLOT & LEGEND)
     # ==========================================
     st.divider()
     st.subheader("📊 Quantitative Assessment")
@@ -193,7 +192,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     # 4. Uncertainty Visualization (Chart Only)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
-        fig, ax = plt.subplots(figsize=(10, 3))
+        fig, ax = plt.subplots(figsize=(10, 3.5)) # Tăng chiều cao một chút
         
         # Background Zones
         ax.axvspan(0, GRAY_LOW, color='green', alpha=0.05, label='Low Risk Zone')
@@ -209,12 +208,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         # Threshold Line
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.5, label=f"Threshold: {GRAY_HIGH:.0%}")
 
-        # Formatting
-        ax.set_title("Probability Distribution (1,000 Bootstrap Models)", fontsize=10)
+        # Formatting (CẬP NHẬT MỚI TẠI ĐÂY)
+        # Đổi tiêu đề cho chuyên nghiệp hơn
+        ax.set_title("Estimated Risk Distribution & Confidence Intervals", fontsize=11, fontweight='bold')
         ax.set_xlabel("Predicted Probability of csPCa", fontsize=9)
         ax.set_yticks([]) 
-        ax.set_xlim(0, max(0.6, high_ci + 0.1))
-        ax.legend(loc='upper right', fontsize='small', frameon=True)
+        
+        # Đặt giới hạn trục X
+        x_max = max(0.6, high_ci + 0.15) # Thêm chút không gian bên phải
+        ax.set_xlim(0, x_max)
+        
+        # CẬP NHẬT LEGEND: Dùng loc='best' để tự động tránh che lấp
+        ax.legend(loc='best', fontsize='small', frameon=True, framealpha=0.8, shadow=True)
         
         st.pyplot(fig)
 
