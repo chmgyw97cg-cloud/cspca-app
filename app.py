@@ -86,6 +86,34 @@ with st.sidebar:
 # ==========================================
 if st.button("🚀 RUN ANALYSIS", type="primary"):
     
+    # ---------------------------------------------------------
+    # 1. VALIDATION CHECK (KIỂM TRA TIÊU CHUẨN ĐẦU VÀO)
+    # ---------------------------------------------------------
+    warnings = []
+    
+    # Kiểm tra Tuổi (Khuyến cáo: 55 - 75)
+    if not (55 <= age <= 75):
+        warnings.append(f"⚠️ **Age ({age})** is outside the validation range (55-75 years).")
+        
+    # Kiểm tra PSA (Khuyến cáo: 0.4 - 50.0)
+    if not (0.4 <= psa <= 50.0):
+        warnings.append(f"⚠️ **PSA ({psa} ng/mL)** is outside the validation range (0.4-50.0 ng/mL).")
+        
+    # Kiểm tra Thể tích (Khuyến cáo: 10 - 110)
+    if not (10 <= vol <= 110):
+        warnings.append(f"⚠️ **Prostate Volume ({vol} mL)** is outside the validation range (10-110 mL).")
+
+    # Nếu có cảnh báo, hiển thị ngay đầu trang kết quả
+    if warnings:
+        with st.warning("### ⚠️ Clinical Warning: Out of Distribution"):
+            st.write("The patient's data falls outside the model's inclusion criteria. Results should be interpreted with caution.")
+            for w in warnings:
+                st.markdown(f"* {w}")
+
+    # ---------------------------------------------------------
+    # 2. XỬ LÝ VÀ DỰ BÁO
+    # ---------------------------------------------------------
+    
     # --- A. Pre-processing ---
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
@@ -231,21 +259,20 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         # Hình nhỏ gọn (8x3 inch)
         fig, ax = plt.subplots(figsize=(8, 3))
 
-        # --- BẢNG MÀU TỐI ƯU (DISTINCT COLORS) ---
-        # 1. Low Risk: "Mint Green" / "Teal" (#66c2a5) -> Họ hàng xanh lá, nhưng đậm đà và khác biệt
-        # 2. Intermediate: "Orange" (#fc8d62) -> Tương phản mạnh với xanh
-        # 3. High: "Red" (#e78ac3 hoặc đỏ nhạt)
-        
-        color_low = '#66c2a5'  # Mint Green (Xanh ngọc - Đồng bộ ý nghĩa An toàn, nhưng dễ nhìn)
-        color_mid = '#fc8d62'  # Orange (Cam - Tương phản tốt)
-        color_high = '#e78ac3' # Pinkish Red (Đỏ hồng - Cảnh báo)
+        # --- BẢNG MÀU TỐI ƯU (GREEN - ORANGE - RED) ---
+        # 1. Low Risk: Xanh Lá Chuẩn (#28a745)
+        color_low = '#28a745'  
+        # 2. Intermediate: Cam (#fd7e14)
+        color_mid = '#fd7e14'  
+        # 3. High: Đỏ (#dc3545)
+        color_high = '#dc3545' 
         
         # Background Zones
-        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.25, label='Low Risk Zone', lw=0)
-        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.25, label='Intermediate Zone', lw=0)
-        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.25, label='High Risk Zone', lw=0)
+        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.15, label='Low Risk Zone', lw=0)
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.15, label='Intermediate Zone', lw=0)
+        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.1, label='High Risk Zone', lw=0)
 
-        # Density Plot (Màu Xanh Đen đậm đà)
+        # Density Plot
         sns.kdeplot(boot_preds, fill=True, color="#2c3e50", alpha=0.4, ax=ax, linewidth=1.5)
         
         # Indicator Lines
@@ -270,10 +297,10 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         # Legend
         ax.legend(loc='upper right', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
         
-        # Despine (Bỏ khung thừa)
+        # Despine
         sns.despine(offset=5, trim=True)
         
-        # Render (Giữ nguyên kích thước nhỏ, độ nét cao)
+        # Render
         st.pyplot(fig, dpi=300, use_container_width=False)
         
         sns.reset_orig() # Reset theme
