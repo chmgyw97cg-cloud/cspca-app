@@ -265,7 +265,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
         * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
         * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., PSA Density, Free/Total PSA) before biopsying.
+        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., PSA Density, Free/Total PSA) before deciding on biopsy.
         """)
     else:
         st.success(f"""
