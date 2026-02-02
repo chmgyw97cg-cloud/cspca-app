@@ -63,14 +63,27 @@ with st.sidebar:
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative", "Unknown"], horizontal=True)
     
     st.divider()
-    with st.expander("⚙️ Calibration", expanded=True):
-        DEFAULT_TARGET = 38.0
-        local_prev_pct = st.number_input("Target Yield within ROI (%):", 1.0, 99.0, DEFAULT_TARGET, step=0.5, format="%.1f")
-        TRAIN_PREV = 0.452 
+    with st.expander("⚙️ Calibration Details", expanded=True):
+        st.markdown("**Standard: PRECISION Trial**")
+        st.caption("Standard yield for MRI-Targeted Biopsy (ROI) in men with PI-RADS ≥ 3.")
+        
+        DEFAULT_TARGET = 38.0 # Based on PRECISION NEJM 2018
+        
+        local_prev_pct = st.number_input(
+            "Target Yield within ROI (%):", 
+            min_value=1.0, max_value=99.0, 
+            value=DEFAULT_TARGET, 
+            step=0.5, format="%.1f"
+        )
+        st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
+        
+        TRAIN_PREV = 0.452 # Development cohort prevalence
+        
         target_prev = local_prev_pct / 100.0
         def logit(p): return np.log(p / (1 - p))
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
-        st.info(f"✅ Adjusted: **{TRAIN_PREV:.1%}%** ➔ **{local_prev_pct}%**")
+        
+        st.info(f"✅ Adjusted: **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
 
 
 # ==========================================
