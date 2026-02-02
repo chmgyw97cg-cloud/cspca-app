@@ -295,7 +295,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.set_xlim(0, x_max)
         
         # Legend
-        ax.legend(loc='upper right', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
+        ax.legend(loc='best', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
         
         # Despine
         sns.despine(offset=5, trim=True)
