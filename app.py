@@ -5,7 +5,43 @@ import joblib
 from patsy import dmatrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+# --- HÀM VẼ THANH RỦI RO (Helper Function) ---
+def draw_risk_bar(risk_score, threshold=0.20, gray_low=0.10):
+    """Hàm này chịu trách nhiệm vẽ thanh màu HTML"""
+    
+    # 1. Logic chọn màu
+    if risk_score < gray_low:
+        bar_color = "#28a745" # Xanh (Low)
+    elif risk_score < threshold:
+        bar_color = "#ffc107" # Vàng (Intermediate)
+    else:
+        bar_color = "#dc3545" # Đỏ (High)
 
+    # 2. Tính độ dài thanh (tối đa 100%)
+    bar_width = min(int(risk_score * 100), 100)
+    
+    # 3. Mã HTML (Đã được đóng gói gọn gàng)
+    html_code = f"""
+    <div style="background-color: #e9ecef; border-radius: 10px; padding: 5px; position: relative; margin-bottom: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+        <div style="position: absolute; left: {gray_low*100}%; top: 0; bottom: 0; border-left: 2px dashed #6c757d; opacity: 0.6;" title="Gray Zone Start"></div>
+        <div style="position: absolute; left: {threshold*100}%; top: 0; bottom: 0; border-left: 3px solid #343a40;" title="Threshold"></div>
+        
+        <div style="width: {bar_width}%; background-color: {bar_color}; height: 30px; border-radius: 6px; 
+                    text-align: right; padding-right: 10px; color: white; font-weight: bold; line-height: 30px; 
+                    text-shadow: 0px 0px 2px rgba(0,0,0,0.5); transition: width 0.6s ease;">
+            {risk_score:.1%}
+        </div>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #6c757d;">
+        <span>0%</span>
+        <span>Gray Zone ({gray_low:.0%}-{threshold:.0%})</span>
+        <span style="font-weight: bold; color: #343a40;">Threshold ({threshold:.0%})</span>
+        <span>100%</span>
+    </div>
+    """
+    
+    # QUAN TRỌNG: Lệnh này giúp biến mã code thành hình ảnh
+    st.markdown(html_code, unsafe_allow_html=True)
 # ==========================================
 # 1. PAGE CONFIGURATION
 # ==========================================
