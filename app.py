@@ -113,14 +113,13 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
     
-    # --- B. Spline Logic (CRITICAL FIX APPLIED) ---
+   # --- B. Spline Logic (FIXED NAMES & BOUNDS) ---
     try:
-        # Define explicit bounds based on the model's knots
-        # This prevents the "value falls below lower bound" error
-        safe_lower_bound = min(knots) - 5.0
-        safe_upper_bound = max(knots) + 5.0
+        # 1. Tính toán biên an toàn
+        safe_lb = min(knots) - 5.0
+        safe_ub = max(knots) + 5.0
         
-        # Use 'lb' and 'ub' in the patsy formula
+        # 2. Tạo Spline với biên an toàn
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
         
         spline_df = dmatrix(
@@ -128,21 +127,39 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
             {
                 "log_PSA": df_input["log_PSA"], 
                 "knots": knots,
-                "lb": safe_lower_bound,
-                "ub": safe_upper_bound
+                "lb": safe_lb,
+                "ub": safe_ub
             }, 
             return_type="dataframe"
         )
         
-        # Drop intercept if present
-        if "Intercept" in spline_df.columns:
-            spline_df = spline_df.drop(columns=["Intercept"])
+        # 3. SỬA LỖI TÊN CỘT (QUAN TRỌNG)
+        # Model Lasso mong đợi tên cột cũ (không có lower_bound=...), ta phải đổi tên lại cho khớp.
+        new_column_names = {}
+        for col in spline_df.columns:
+            if "Intercept" in col:
+                continue # Intercept xử lý sau
             
-        # Combine features
+            # Lấy chỉ số đuôi [0], [1], [2]...
+            if "[" in col and "]" in col:
+                idx = col.split("[")[-1].split("]")[0] 
+                # Tạo lại tên chuẩn mà Model đã học lúc train
+                original_name = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
+                new_column_names[col] = original_name
+        
+        # Áp dụng đổi tên
+        spline_df = spline_df.rename(columns=new_column_names)
+
+        # 4. Xử lý Intercept (Dựa theo lỗi báo thiếu Intercept)
+        # Nếu model cần Intercept, ta thêm cột Intercept = 1.0 thủ công
+        if "Intercept" not in spline_df.columns:
+            spline_df["Intercept"] = 1.0
+            
+        # 5. Ghép vào DataFrame chính
         df_full = pd.concat([df_input, spline_df], axis=1)
 
     except Exception as e:
-        st.error(f"Spline Calculation Error: {e}")
+        st.error(f"Spline Error: {e}")
         st.stop()
 
     # --- C. Prediction Loop ---
