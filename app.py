@@ -21,120 +21,123 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
-    # Load the .pkl file located in the root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
-    
-    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
-    
-    # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
-    
-    # --- LOAD WEIGHTS & INTERCEPTS ---
     meta_weights = data_packet.get("meta_weights")
     meta_intercept = data_packet.get("meta_intercept", 0.0) 
-    
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
+    
+    if meta_weights is None: st.error("❌ Error: Missing weights."); st.stop()
 
-    if meta_weights is None:
-        st.error("❌ Error: Missing 'meta_weights' in model file.")
-        st.stop()
-
-except FileNotFoundError:
-    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found.")
-    st.stop()
 except Exception as e:
-    st.error(f"❌ Error loading model: {e}")
-    st.stop()
+    st.error(f"❌ Critical Error: {e}"); st.stop()
 
 # ==========================================
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# --- HEADER & DEFINITIONS ---
+# --- HEADER ---
 st.markdown(f"**Standardized Stacking Ensemble** | Decision Threshold: **{THRESHOLD:.0%}**")
 st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is defined as **ISUP Grade Group ≥ 2** (Gleason Score ≥ 3+4).")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
     st.markdown("""
-    * **Age:** 55 – 75 years.
-    * **PSA Level:** 0.4 – 50.0 ng/mL.
-    * **Prostate Volume:** 10 – 110 mL.
-    * **MRI Requirement:** PI-RADS Max Score ≥ 3.
+    * **Target Population:** Men undergoing **MRI-Targeted Biopsy**.
+    * **Inclusion Criteria:** **PI-RADS Score ≥ 3**.
+    * **Age:** 55 – 75 years | **PSA:** 0.4 – 50.0 ng/mL | **Vol:** 10 – 110 mL.
     """)
 
 with st.sidebar:
     st.header("📋 Patient Data")
+    
+    # --- 1. SMART SETTING SELECTION (PRECISION vs PROMIS) ---
+    st.subheader("🏥 Clinical Calibration")
+    st.caption("Select the evidence-based benchmark for calibration:")
+    
+    setting_mode = st.radio(
+        "Reference Standard:",
+        ["PRECISION Trial (NEJM 2018)", "PROMIS Trial (Lancet 2017)"],
+        help="PRECISION represents standard MRI-Targeted Biopsy yield (38%). PROMIS represents 'True Pathology' via Mapping Biopsy (69%)."
+    )
+    
+    # Logic chọn Target Prevalence
+    if setting_mode == "PRECISION Trial (NEJM 2018)":
+        # PRECISION Trial: Yield of csPCa in MRI-Targeted arm was 38%
+        DEFAULT_TARGET = 38.0 
+        TARGET_DESC = "Standard Targeted Biopsy Yield"
+        REF_SOURCE = "PRECISION Trial (Kasivisvanathan et al., NEJM 2018)"
+        REF_DETAILS = "38% detection rate of csPCa in the MRI-targeted biopsy arm."
+    else:
+        # PROMIS Trial: True prevalence in PI-RADS >= 3 group
+        DEFAULT_TARGET = 69.0 
+        TARGET_DESC = "True Disease Prevalence (Mapping Biopsy)"
+        REF_SOURCE = "PROMIS Trial (Ahmed et al., The Lancet 2017)"
+        REF_DETAILS = "Derived true prevalence (~69%) in men with PI-RADS ≥ 3 based on Template Mapping Biopsy."
+
+    st.divider()
+    
+    # --- 2. INPUTS ---
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1, format="%.1f")
     vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
-    
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
+    
     st.divider()
     dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
     
-    # -----------------------------------------------------------
-    # ⚙️ EVIDENCE-BASED CALIBRATION
-    # -----------------------------------------------------------
+    # --- 3. AUTO CALIBRATION ---
     st.divider()
-    with st.expander("⚙️ Calibration (Evidence-Based)", expanded=True):
-        st.caption("Baseline adjustment using PROMIS trial data.")
+    with st.expander("⚙️ Calibration Details", expanded=True):
         
-        # 1. Input Prevalence (Default: 50% for Gleason >= 3+4 PROMIS)
+        # Cho phép sửa số nhưng mặc định theo Mode đã chọn
         local_prev_pct = st.number_input(
-            "Target csPCa Prevalence (%):", 
-            min_value=1.0, max_value=80.0, 
-            value=50.0, # Target: PROMIS (Secondary Definition)
-            step=0.5, format="%.1f",
-            help="Default set to 50.0% based on PROMIS 'Secondary Definition' (Gleason >= 3+4) detection rate via MRI-directed biopsy."
+            "Target Prevalence (%):", 
+            min_value=1.0, max_value=99.0, 
+            value=DEFAULT_TARGET, 
+            step=0.5, format="%.1f"
         )
         
-        # 2. Define Original Prevalence (FROM YOUR DATA)
-        # Training cohort: 1209 patients, 45.2% cancer rate
+        # Training Prevalence (DỮ LIỆU CỦA BẠN - 1209 BN)
         TRAIN_PREV = 0.452 
         
-        # 3. Auto-calculate Offset
+        # Tính toán
         target_prev = local_prev_pct / 100.0
-        
         def logit(p): return np.log(p / (1 - p))
-        
-        # Bayes Formula
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
         
-        st.info(f"✅ Calibrated from **Development Cohort ({TRAIN_PREV:.1%})** to **PROMIS Standard ({local_prev_pct}%)**.")
+        st.info(f"✅ Calibrated: **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
+        st.caption(f"Ref: {REF_SOURCE}")
 
 # ==========================================
 # 4. PREDICTION LOGIC
 # ==========================================
 if st.button("🚀 RUN ANALYSIS", type="primary"):
     
-    # 1. VALIDATION CHECK
+    # 1. VALIDATION
     warnings = []
-    if not (55 <= age <= 75): 
-        warnings.append(f"⚠️ **Age ({age})** is outside the validation range (55-75 years).")
-    if not (0.4 <= psa <= 50.0): 
-        warnings.append(f"⚠️ **PSA ({psa} ng/mL)** is outside the validation range (0.4-50.0 ng/mL).")
-    if not (10 <= vol <= 110): 
-        warnings.append(f"⚠️ **Prostate Volume ({vol} mL)** is outside the validation range (10-110 mL).")
-
+    if not (55 <= age <= 75): warnings.append(f"⚠️ **Age ({age})** outside 55-75.")
+    if not (0.4 <= psa <= 50.0): warnings.append(f"⚠️ **PSA ({psa})** outside 0.4-50.0.")
+    if not (10 <= vol <= 110): warnings.append(f"⚠️ **Vol ({vol})** outside 10-110.")
     if warnings:
         with st.warning("### ⚠️ Clinical Warning: Out of Distribution"):
-            st.write("The patient's data falls outside the model's inclusion criteria. Results should be interpreted with caution.")
-            for w in warnings: 
-                st.markdown(f"* {w}")
+            for w in warnings: st.markdown(f"* {w}")
 
     # 2. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
+    
+    # Calculate PSA Density for Recommendation
+    psa_density = psa / vol
     
     input_dict = {
         "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
@@ -149,26 +152,19 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     # Spline Logic
     try:
-        safe_lb = min(knots) - 5.0
-        safe_ub = max(knots) + 5.0
+        safe_lb = min(knots) - 5.0; safe_ub = max(knots) + 5.0
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
-        spline_df = dmatrix(spline_formula, 
-                           {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, 
-                           return_type="dataframe")
+        spline_df = dmatrix(spline_formula, {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, return_type="dataframe")
         
         rename_map = {}
         for col in spline_df.columns:
             if "Intercept" in col: continue
             match = re.search(r"\[(\d+)\]$", col)
-            if match: 
-                rename_map[col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{match.group(1)}]"
+            if match: rename_map[col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{match.group(1)}]"
         spline_df = spline_df.rename(columns=rename_map)
-        if "Intercept" not in spline_df.columns: 
-            spline_df["Intercept"] = 1.0
+        if "Intercept" not in spline_df.columns: spline_df["Intercept"] = 1.0
         df_full = pd.concat([df_input, spline_df], axis=1)
-    except Exception as e:
-        st.error(f"Spline Processing Error: {e}")
-        st.stop()
+    except Exception as e: st.error(f"Spline Error: {e}"); st.stop()
 
     # 3. INFERENCE
     base_preds = []
@@ -178,26 +174,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         try:
             p = model.predict_proba(df_full[cols])[:, 1][0] if hasattr(model, "predict_proba") else model.predict(df_full[cols])[0]
             base_preds.append(p)
-        except: 
-            st.error(f"Error in model {name}"); st.stop()
-    
+        except: st.error(f"Error in {name}"); st.stop()
     base_preds = np.array(base_preds)
     
-    # 4. META-PREDICTION (WITH AUTO CALIBRATION)
+    # 4. META-PREDICTION (WITH OFFSET)
     raw_log_odds = np.dot(base_preds, meta_weights) + meta_intercept
-    
-    # --- APPLY AUTO OFFSET ---
     final_log_odds = raw_log_odds + CALIBRATION_OFFSET
     risk_mean = 1 / (1 + np.exp(-final_log_odds))
     
     if bootstrap_weights is not None:
         boot_log_odds = np.dot(bootstrap_weights, base_preds)
-        if bootstrap_intercepts is not None: 
-            boot_log_odds += bootstrap_intercepts
-        
-        # Apply calibration to bootstrap
+        if bootstrap_intercepts is not None: boot_log_odds += bootstrap_intercepts
         boot_log_odds += CALIBRATION_OFFSET
-        
         boot_preds = 1 / (1 + np.exp(-boot_log_odds))
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
@@ -229,7 +217,6 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         sns.set_theme(style="ticks", context="paper", font_scale=1.1)
         fig, ax = plt.subplots(figsize=(8, 3))
         
-        # Optimized Colors (Green - Orange - Red)
         color_low, color_mid, color_high = '#28a745', '#fd7e14', '#dc3545'
         ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.15, label='Low Risk', lw=0)
         ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.15, label='Intermediate', lw=0)
@@ -240,7 +227,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Threshold: {GRAY_HIGH:.0%}")
 
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", y=1.02, fontsize=12, fontweight='bold', color='#333')
-        plt.title(f"Calibrated to {local_prev_pct:.1f}% csPCa Prevalence (Ref: PROMIS Trial, The Lancet 2017)", fontsize=9, color='#666', style='italic', pad=10)
+        plt.title(f"Target Prevalence: {local_prev_pct:.1f}% ({TARGET_DESC})", fontsize=9, color='#666', style='italic', pad=10)
         
         ax.set_xlabel("Predicted Probability of csPCa"); ax.set_ylabel("Density")
         ax.set_xlim(0, max(0.6, high_ci + 0.15))
@@ -249,29 +236,37 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         st.pyplot(fig, dpi=300, use_container_width=False)
         sns.reset_orig()
 
-    # --- KHÔI PHỤC PHẦN CLINICAL RECOMMENDATION CHI TIẾT ---
+    # --- DETAILED CLINICAL RECOMMENDATION ---
     st.subheader("💡 Clinical Recommendation")
     
+    # Hiển thị PSAD để bác sĩ tham khảo
+    st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
+
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The predicted risk exceeds the optimal biopsy threshold.
-        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
+        * **Interpretation:** The patient has a high probability of harboring clinically significant prostate cancer (ISUP ≥ 2).
+        * **Recommended Action:** * Proceed with **Prostate Biopsy**. 
+            * **Technique:** Guidelines suggest combining **MRI-Targeted Biopsy** (for PI-RADS ≥ 3 lesions) with **Systematic Biopsy** to maximize detection yield.
         """)
     elif risk_mean >= GRAY_LOW:
+        # Tư vấn Gray Zone chi tiết
+        psad_note = "High" if psa_density >= 0.15 else "Low"
         st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
+        * **Interpretation:** Diagnostic uncertainty exists. The risk of csPCa is elevated but not definitive.
+        * **Clinical Nuance:** * Check **PSA Density (PSAD)**: Your patient's PSAD is **{psa_density:.2f}**. (Generally, PSAD ≥ 0.15 increases risk).
+            * Consider **Shared Decision Making (SDM)** with the patient regarding the benefits and risks of biopsy.
+        * **Recommended Action:** * If **PSAD ≥ 0.15** or **PI-RADS 4/5**: Biopsy is strongly favored.
+            * If **PSAD < 0.15** and **PI-RADS 3**: Consider ancillary testing (e.g., Free/Total PSA, PHI, 4Kscore) or short-interval PSA monitoring (3-6 months).
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Interpretation:** High Negative Predictive Value (NPV).
-        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
+        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of csPCa is low.
+        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal and no other high-risk features exist.
+            * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
+            * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
         """)
     
-    st.info(f"**Note:** Model results calibrated to **{local_prev_pct}%** csPCa prevalence (PROMIS Standard - Gleason ≥ 3+4).")
+    st.info(f"**Standard Used:** {REF_SOURCE}. ({REF_DETAILS})")
