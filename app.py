@@ -72,6 +72,7 @@ with st.sidebar:
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
         st.info(f"✅ Adjusted: **{TRAIN_PREV:.1%}%** ➔ **{local_prev_pct}%**")
 
+
 # ==========================================
 # 4. PREDICTION LOGIC
 # ==========================================
@@ -138,6 +139,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
         f"**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% Confidence Interval is **{low_ci:.1%}** to **{high_ci:.1%}**."
+        f"A narrower distribution reflects higher model confidence."
     )
 
     # --- UNCERTAINTY VISUALIZATION (CLEANED) ---
@@ -157,7 +159,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.set_xlabel("Probability of csPCa (0.0 - 1.0)", fontsize=10)
         ax.set_ylabel("Density", fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
-        ax.legend(loc='upper right', fontsize=9)
+        ax.legend(loc='best', fontsize=9)
         
         sns.despine()
         st.pyplot(fig, dpi=300)
