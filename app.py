@@ -35,7 +35,7 @@ try:
     # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
     
-    # --- CẬP NHẬT QUAN TRỌNG: LOAD TRỌNG SỐ & INTERCEPT ---
+    # --- LOAD TRỌNG SỐ & INTERCEPT ---
     meta_weights = data_packet.get("meta_weights")
     # Lấy Intercept (nếu không có thì mặc định là 0)
     meta_intercept = data_packet.get("meta_intercept", 0.0) 
@@ -58,7 +58,7 @@ except Exception as e:
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
-st.markdown(f"**Meta-stacking Ensemble Model** | Decision Threshold: **{THRESHOLD:.0%}**")
+st.markdown(f"**Standardized Stacking Ensemble** | Decision Threshold: **{THRESHOLD:.0%}**")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
     st.markdown("""
@@ -72,7 +72,7 @@ with st.sidebar:
     st.header("📋 Patient Data")
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1, format="%.1f")
-    # Giữ nguyên volume số thực như bạn yêu cầu
+    # Volume: Cho phép nhập số thập phân
     vol = st.number_input("Prostate Volume (mL)", 5.0, 300.0, 45.0, step=0.1, format="%.1f")
     
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
@@ -167,25 +167,21 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     base_preds = np.array(base_preds)
     
-    # --- D. Meta-Prediction (SỬA LỖI 169%: THÊM SIGMOID) ---
+    # --- D. Meta-Prediction (LOGIC CHUẨN: SIGMOID + INTERCEPT) ---
     
     # 1. Tính Log-odds (Linear combination: w*x + b)
     log_odds = np.dot(base_preds, meta_weights) + meta_intercept
     
-    # 2. Chuyển sang Xác suất (Sigmoid Function: 1 / (1 + e^-z))
-    # Bước này ép giá trị về khoảng [0, 1] -> Hết lỗi > 100%
+    # 2. Chuyển sang Xác suất (Sigmoid): P = 1 / (1 + e^-z)
     risk_mean = 1 / (1 + np.exp(-log_odds))
     
     # 3. Bootstrap Uncertainty (Cũng dùng Sigmoid)
     if bootstrap_weights is not None:
-        # Tính Log-odds cho 1000 mẫu
         boot_log_odds = np.dot(bootstrap_weights, base_preds)
         
-        # Cộng intercept nếu có
         if bootstrap_intercepts is not None:
             boot_log_odds += bootstrap_intercepts
             
-        # Chuyển tất cả sang Xác suất
         boot_preds = 1 / (1 + np.exp(-boot_log_odds))
         
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
@@ -226,60 +222,61 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         c2.metric("Lower 95% CI", "N/A")
         c3.metric("Upper 95% CI", "N/A")
 
-  # 4. Uncertainty Visualization (High Contrast Scientific Style)
+    # 4. Uncertainty Visualization (Nature Style - Optimized Colors)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
-        # --- NATURE STYLE SETUP ---
+        # Use 'ticks' style for clean, minimalist look
         sns.set_theme(style="ticks", context="paper", font_scale=1.1)
         
-        # figsize=(width, height). Giữ kích thước gọn (8, 3)
+        # Hình nhỏ gọn (8x3 inch)
         fig, ax = plt.subplots(figsize=(8, 3))
 
-        # --- BẢNG MÀU MỚI (HIGH CONTRAST) ---
-        # Dùng tông Xanh Dương - Cam - Đỏ (Blue - Orange - Red)
-        # Đây là bảng màu chuẩn "Paired" giúp phân biệt cực rõ vùng An toàn và Vùng xám
-        color_low = '#a6cee3'  # Light Blue (Thay cho xanh lá - Rất dễ nhìn)
-        color_mid = '#fdbf6f'  # Light Orange (Thay cho vàng nhạt - Tương phản tốt với xanh)
-        color_high = '#fb9a99' # Light Red (Giữ nguyên màu đỏ cảnh báo)
+        # --- BẢNG MÀU TỐI ƯU (DISTINCT COLORS) ---
+        # 1. Low Risk: "Mint Green" / "Teal" (#66c2a5) -> Họ hàng xanh lá, nhưng đậm đà và khác biệt
+        # 2. Intermediate: "Orange" (#fc8d62) -> Tương phản mạnh với xanh
+        # 3. High: "Red" (#e78ac3 hoặc đỏ nhạt)
+        
+        color_low = '#66c2a5'  # Mint Green (Xanh ngọc - Đồng bộ ý nghĩa An toàn, nhưng dễ nhìn)
+        color_mid = '#fc8d62'  # Orange (Cam - Tương phản tốt)
+        color_high = '#e78ac3' # Pinkish Red (Đỏ hồng - Cảnh báo)
         
         # Background Zones
-        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.3, label='Low Risk Zone', lw=0)
-        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.3, label='Intermediate Zone', lw=0)
-        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.3, label='High Risk Zone', lw=0)
+        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.25, label='Low Risk Zone', lw=0)
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.25, label='Intermediate Zone', lw=0)
+        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.25, label='High Risk Zone', lw=0)
 
-        # Density Plot 
-        # Đổi màu đường viền density sang màu Tím than (Dark Slate) để nổi bật trên mọi nền
+        # Density Plot (Màu Xanh Đen đậm đà)
         sns.kdeplot(boot_preds, fill=True, color="#2c3e50", alpha=0.4, ax=ax, linewidth=1.5)
         
         # Indicator Lines
-        ax.axvline(risk_mean, color="#e31a1c", linestyle="-", linewidth=2, label=f"Mean Prediction: {risk_mean:.1%}")
+        ax.axvline(risk_mean, color="#d95f02", linestyle="-", linewidth=2, label=f"Mean Prediction: {risk_mean:.1%}")
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Biopsy Threshold: {GRAY_HIGH:.0%}")
 
-        # Titles and Subtitles
+        # Titles
         n_boot = len(bootstrap_weights) if bootstrap_weights is not None else 0
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", 
                      y=1.02, fontsize=12, fontweight='bold', color='#333')
         plt.title(f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
                   fontsize=9, color='#666', style='italic', pad=10)
 
-        # Axis Formatting
+        # Axis
         ax.set_xlabel("Predicted Probability of csPCa", labelpad=5)
         ax.set_ylabel("Density (Bootstrap)", labelpad=5)
         
-        # Set X-axis limit
+        # Limits
         x_max = max(0.6, high_ci + 0.15)
         ax.set_xlim(0, x_max)
         
         # Legend
         ax.legend(loc='upper right', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
         
-        # Despine
+        # Despine (Bỏ khung thừa)
         sns.despine(offset=5, trim=True)
         
-        # Hiển thị
+        # Render (Giữ nguyên kích thước nhỏ, độ nét cao)
         st.pyplot(fig, dpi=300, use_container_width=False)
         
-        sns.reset_orig()
+        sns.reset_orig() # Reset theme
 
     # 5. Clinical Recommendation (3 Levels)
     st.subheader("💡 Clinical Recommendation")
@@ -306,6 +303,6 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
         """)
 
-    # Footer Interpretation
+    # Footer
     st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
             f"Considering model uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
