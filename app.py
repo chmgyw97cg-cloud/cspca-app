@@ -105,11 +105,11 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         warnings.append(f"• **PSA ({psa})** is outside the validated range (0.4-50.0).")
     if not (10 <= vol <= 110): 
         warnings.append(f"• **Volume ({vol})** is outside the validated range (10-110).")
-    
     if warnings:
         with st.warning("⚠️ **Clinical Caution: Out of Distribution**"):
             st.markdown("The patient's profile is outside the core inclusion criteria. Results should be interpreted with extra caution.")
             for w in warnings: st.markdown(w)
+                
     # 1. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
