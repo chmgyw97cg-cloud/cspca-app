@@ -196,8 +196,9 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     ci_width = high_ci - low_ci
     st.success(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
-        f"💡 **Note on Uncertainty:** The true risk lies between **{low_ci:.1%}** and **{high_ci:.1%}**. "
-        f"A **narrower interval** (currently {ci_width:.1%}) indicates **higher reliability** of the prediction for this specific patient."
+        f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}** "
+        f"(uncertainty spread: **{high_ci - low_ci:.1%}**). "
+        f"**A narrower spread implies higher certainty.**"
     )
 
     st.write("### 🔍 Uncertainty Visualization")
