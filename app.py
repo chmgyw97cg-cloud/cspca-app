@@ -177,7 +177,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         
         # Formatting
         plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15)
-        ax.set_xlabel("Probability of csPCa (0.0 - 1.0)", fontsize=10)
+        ax.set_xlabel("Predicted Probability of csPCa", fontsize=10)
         ax.set_ylabel("Density", fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
         ax.legend(loc='best', fontsize=9)
