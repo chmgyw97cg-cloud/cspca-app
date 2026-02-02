@@ -99,12 +99,12 @@ with st.sidebar:
 if st.button("🚀 RUN ANALYSIS", type="primary"):
     # 0. CLINICAL VALIDATION
     warnings = []
-    if not (55 <= age <= 75): 
-        warnings.append(f"• **Age ({age})** is outside the study range (55-75).")
-    if not (0.4 <= psa <= 50.0): 
-        warnings.append(f"• **PSA ({psa})** is outside the validated range (0.4-50.0).")
-    if not (10 <= vol <= 110): 
-        warnings.append(f"• **Volume ({vol})** is outside the validated range (10-110).")
+    if not (55 <= age <= 75): warnings.append(f"⚠️ **Age ({age})** outside 55-75.")
+    if not (0.4 <= psa <= 50.0): warnings.append(f"⚠️ **PSA ({psa})** outside 0.4-50.0.")
+    if not (10 <= vol <= 110): warnings.append(f"⚠️ **Vol ({vol})** outside 10-110.")
+    if warnings:
+        with st.warning("### ⚠️ Clinical Warning: Out of Distribution"):
+            for w in warnings: st.markdown(f"* {w}")
                 
     # 1. PRE-PROCESSING
     log_psa_val = np.log(psa)
@@ -156,13 +156,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         low_ci, high_ci, has_ci = risk_mean, risk_mean, False
 
     # 3. DISPLAY
-    st.divider()
-    if len(warn_list) > 0:
-        with st.warning("⚠️ **Clinical Caution: Out of Distribution**"):
-            st.write("The patient's profile is outside the core inclusion criteria. Results should be interpreted with extra caution.")
-            for w in warn_list: 
-                st.markdown(w)
-                
+    st.divider()  
     st.subheader("📊 Quantitative Assessment")
 
     c1, c2, c3 = st.columns(3)
