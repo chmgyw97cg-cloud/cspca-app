@@ -196,7 +196,8 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     ci_width = high_ci - low_ci
     st.info(
         f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of csPCa within the ROI.\n\n"
-        f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**. "
+        f"**Note on Uncertainty:** The true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}** "
+        f"(uncertainty spread: **{high_ci - low_ci:.1%}**). "
         f"**A narrower range implies higher certainty.**"
     )
 
@@ -224,25 +225,4 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         st.pyplot(fig, dpi=300, use_container_width=False)
         sns.reset_orig()
 
-    # --- DETAILED CLINICAL RECOMMENDATION ---
-    st.subheader("💡 Clinical Recommendation")
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
-
-    if risk_mean >= GRAY_HIGH:
-        st.error(f"""
-        **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
-        """)
-    elif risk_mean >= GRAY_LOW:
-        st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
-        """)
-    else:
-        st.success(f"""
-        **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
-        """)
