@@ -21,20 +21,26 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
+    # Load the .pkl file located in the root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
     
+    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
+    
+    # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
+    
+    # Weights for Meta-Ensemble
     meta_weights = data_packet.get("meta_weights")
     bootstrap_weights = data_packet.get("bootstrap_weights")
 
     if meta_weights is None:
-        st.error("❌ Error: Missing 'meta_weights' in .pkl file.")
+        st.error("❌ Error: Missing 'meta_weights' in model file.")
         st.stop()
 
 except FileNotFoundError:
@@ -78,6 +84,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     
+    # Input Dictionary Mapping
     input_dict = {
         "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
         "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0], 
@@ -89,15 +96,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
     
-    # --- B. Spline Logic ---
+    # --- B. Spline Logic (Robust Fix) ---
     try:
+        # Define safety bounds to prevent Patsy errors
         safe_lb = min(knots) - 5.0
         safe_ub = max(knots) + 5.0
+        
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
         spline_df = dmatrix(spline_formula, 
                            {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, 
                            return_type="dataframe")
         
+        # Rename columns to match training data (removing lower_bound args from names)
         rename_map = {}
         for col in spline_df.columns:
             if "Intercept" in col: continue
@@ -108,6 +118,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
                 rename_map[col] = original_name
         spline_df = spline_df.rename(columns=rename_map)
 
+        # Add Intercept if required by Lasso
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
             
@@ -123,16 +134,20 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     for name in model_names:
         model = base_models[name]
+        
+        # Feature selection
         if name in feature_mapping:
             required_cols = feature_mapping[name]
         else:
             required_cols = df_full.columns.tolist()
             
+        # Check missing columns
         missing = [c for c in required_cols if c not in df_full.columns]
         if missing:
             st.error(f"❌ Model '{name}' missing columns: {missing}")
             st.stop()
             
+        # Inference
         try:
             X_subset = df_full[required_cols]
             if hasattr(model, "predict_proba"):
@@ -146,7 +161,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     base_preds = np.array(base_preds)
     
-    # --- D. Meta-Prediction ---
+    # --- D. Meta-Prediction & CI ---
     risk_mean = np.dot(base_preds, meta_weights)
     
     if bootstrap_weights is not None:
@@ -158,7 +173,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         has_ci = False
 
     # ==========================================
-    # 5. OUTPUT DISPLAY (IMPROVED PLOT & LEGEND)
+    # 5. OUTPUT DISPLAY (SCIENTIFIC VERSION)
     # ==========================================
     st.divider()
     st.subheader("📊 Quantitative Assessment")
@@ -189,41 +204,53 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         c2.metric("Lower 95% CI", "N/A")
         c3.metric("Upper 95% CI", "N/A")
 
-    # 4. Uncertainty Visualization (Chart Only)
+    # 4. Uncertainty Visualization (Scientific 2D Style)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
-        fig, ax = plt.subplots(figsize=(10, 3.5)) # Tăng chiều cao một chút
+        # Use a clean, scientific white theme (2D flat look)
+        sns.set_theme(style="white", rc={"axes.grid": True, "grid.color": ".9", "axes.edgecolor": ".3"})
         
-        # Background Zones
-        ax.axvspan(0, GRAY_LOW, color='green', alpha=0.05, label='Low Risk Zone')
-        ax.axvspan(GRAY_LOW, GRAY_HIGH, color='orange', alpha=0.1, label='Intermediate Zone')
-        ax.axvspan(GRAY_HIGH, 1.0, color='red', alpha=0.05, label='High Risk Zone')
+        fig, ax = plt.subplots(figsize=(10, 4.5))
 
-        # Density Plot
-        sns.kdeplot(boot_preds, fill=True, color="#007bff", alpha=0.4, ax=ax, linewidth=1.5)
-        
-        # Mean Line
-        ax.axvline(risk_mean, color="#d63384", linestyle="-", linewidth=2.5, label=f"Mean Risk: {risk_mean:.1%}")
-        
-        # Threshold Line
-        ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.5, label=f"Threshold: {GRAY_HIGH:.0%}")
+        # Background Zones (Flat 2D)
+        ax.axvspan(0, GRAY_LOW, color='#28a745', alpha=0.08, label='Low Risk Zone', lw=0)
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color='#ffc107', alpha=0.12, label='Intermediate Zone', lw=0)
+        ax.axvspan(GRAY_HIGH, 1.0, color='#dc3545', alpha=0.08, label='High Risk Zone', lw=0)
 
-        # Formatting (CẬP NHẬT MỚI TẠI ĐÂY)
-        # Đổi tiêu đề cho chuyên nghiệp hơn
-        ax.set_title("Estimated Risk Distribution & Confidence Intervals", fontsize=11, fontweight='bold')
-        ax.set_xlabel("Predicted Probability of csPCa", fontsize=9)
-        ax.set_yticks([]) 
+        # Density Plot (2D Flat)
+        sns.kdeplot(boot_preds, fill=True, color="#0056b3", alpha=0.3, ax=ax, linewidth=2)
         
-        # Đặt giới hạn trục X
-        x_max = max(0.6, high_ci + 0.15) # Thêm chút không gian bên phải
+        # Indicator Lines
+        ax.axvline(risk_mean, color="#d63384", linestyle="-", linewidth=2.5, label=f"Mean Prediction: {risk_mean:.1%}")
+        ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.5, label=f"Biopsy Threshold: {GRAY_HIGH:.0%}")
+
+        # Titles and Subtitles (The Solution for n=1000)
+        ax.text(x=0.5, y=1.08, s="Estimated Risk Distribution & Confidence Intervals", 
+                transform=ax.transAxes, ha='center', fontsize=12, fontweight='bold', color='#333')
+        
+        # Subtitle containing the bootstrap count
+        n_boot = len(bootstrap_weights) if bootstrap_weights is not None else 0
+        ax.text(x=0.5, y=1.02, s=f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
+                transform=ax.transAxes, ha='center', fontsize=9, color='#666', style='italic')
+
+        # Axis Formatting
+        ax.set_xlabel("Predicted Probability of csPCa", fontsize=10, labelpad=10)
+        ax.set_ylabel("Density", fontsize=10, labelpad=10)
+        
+        # Set X-axis limit
+        x_max = max(0.6, high_ci + 0.15)
         ax.set_xlim(0, x_max)
         
-        # CẬP NHẬT LEGEND: Dùng loc='best' để tự động tránh che lấp
-        ax.legend(loc='best', fontsize='small', frameon=True, framealpha=0.8, shadow=True)
+        # Legend (Smart positioning, no shadow)
+        ax.legend(loc='best', fontsize=9, frameon=True, edgecolor='#ccc', framealpha=0.9, shadow=False)
+        
+        # Despine for scientific look
+        sns.despine(left=False, bottom=False, top=True, right=True)
         
         st.pyplot(fig)
+        sns.reset_orig() # Reset theme
 
-    # 5. Clinical Recommendation
+    # 5. Clinical Recommendation (3 Levels)
     st.subheader("💡 Clinical Recommendation")
     
     if risk_mean >= GRAY_HIGH:
@@ -238,7 +265,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
         * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
         * **Interpretation:** The patient falls into the diagnostic "Gray Zone".
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors before biopsying.
+        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., PSA Density, Free/Total PSA) before biopsying.
         """)
     else:
         st.success(f"""
@@ -248,6 +275,6 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
         """)
 
-    # Text Interpretation
+    # Footer Interpretation
     st.info(f"**Interpretation:** The model predicts a **{risk_mean:.1%}** probability of clinically significant Prostate Cancer (csPCa). "
             f"Considering model uncertainty, the true risk likely lies between **{low_ci:.1%}** and **{high_ci:.1%}**.")
