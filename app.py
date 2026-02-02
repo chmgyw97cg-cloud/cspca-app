@@ -21,36 +21,51 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
+    # Load the .pkl file located in the root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
+    
+    # Unpack components
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
+    
+    # Clinical Thresholds (Default to 20% if not specified)
     THRESHOLD = data_packet.get("threshold", 0.20)
+    
+    # --- LOAD WEIGHTS & INTERCEPTS ---
     meta_weights = data_packet.get("meta_weights")
     meta_intercept = data_packet.get("meta_intercept", 0.0) 
+    
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
-    
-    if meta_weights is None: st.error("❌ Error: Missing weights."); st.stop()
 
+    if meta_weights is None:
+        st.error("❌ Error: Missing 'meta_weights' in model file.")
+        st.stop()
+
+except FileNotFoundError:
+    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found.")
+    st.stop()
 except Exception as e:
-    st.error(f"❌ Critical Error: {e}"); st.stop()
+    st.error(f"❌ Error loading model: {e}")
+    st.stop()
 
 # ==========================================
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-# --- HEADER ---
+# --- HEADER & DEFINITIONS ---
 st.markdown(f"**Standardized Stacking Ensemble** | Decision Threshold: **{THRESHOLD:.0%}**")
 st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is defined as **ISUP Grade Group ≥ 2** (Gleason Score ≥ 3+4).")
+st.caption("**Scope:** Prediction applies to **MRI-Targeted Biopsy (ROI-only)**.")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
     st.markdown("""
-    * **Target Population:** Men undergoing **MRI-Targeted Biopsy**.
+    * **Target Population:** Men undergoing **MRI-Targeted Biopsy** (ROI-only).
     * **Inclusion Criteria:** **PI-RADS Score ≥ 3**.
     * **Age:** 55 – 75 years | **PSA:** 0.4 – 50.0 ng/mL | **Vol:** 10 – 110 mL.
     """)
@@ -58,29 +73,24 @@ with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False)
 with st.sidebar:
     st.header("📋 Patient Data")
     
-    # --- 1. SMART SETTING SELECTION (PRECISION vs PROMIS) ---
+    # --- 1. CALIBRATION SETTING (ROI-ONLY STANDARD) ---
     st.subheader("🏥 Clinical Calibration")
-    st.caption("Select the evidence-based benchmark for calibration:")
+    st.caption("Standard for MRI-Targeted Biopsy (ROI):")
     
-    setting_mode = st.radio(
-        "Reference Standard:",
-        ["PRECISION Trial (NEJM 2018)", "PROMIS Trial (Lancet 2017)"],
-        help="PRECISION represents standard MRI-Targeted Biopsy yield (38%). PROMIS represents 'True Pathology' via Mapping Biopsy (69%)."
+    # Mặc định là PRECISION (38%) vì khớp với ROI-only
+    calib_standard = st.selectbox(
+        "Reference Benchmark:",
+        ["PRECISION Trial (NEJM 2018)", "PROMIS Trial (Targeted Arm)"],
+        index=0,
+        help="Both trials show ~37-38% yield for csPCa when restricting biopsy to the ROI (Targeted Biopsy)."
     )
     
-    # Logic chọn Target Prevalence
-    if setting_mode == "PRECISION Trial (NEJM 2018)":
-        # PRECISION Trial: Yield of csPCa in MRI-Targeted arm was 38%
-        DEFAULT_TARGET = 38.0 
-        TARGET_DESC = "Standard Targeted Biopsy Yield"
+    if calib_standard == "PRECISION Trial (NEJM 2018)":
+        DEFAULT_TARGET = 38.0
         REF_SOURCE = "PRECISION Trial (Kasivisvanathan et al., NEJM 2018)"
-        REF_DETAILS = "38% detection rate of csPCa in the MRI-targeted biopsy arm."
     else:
-        # PROMIS Trial: True prevalence in PI-RADS >= 3 group
-        DEFAULT_TARGET = 69.0 
-        TARGET_DESC = "True Disease Prevalence (Mapping Biopsy)"
-        REF_SOURCE = "PROMIS Trial (Ahmed et al., The Lancet 2017)"
-        REF_DETAILS = "Derived true prevalence (~69%) in men with PI-RADS ≥ 3 based on Template Mapping Biopsy."
+        DEFAULT_TARGET = 37.0 # PROMIS Targeted Arm (Table S6)
+        REF_SOURCE = "PROMIS Trial (Ahmed et al., Lancet 2017 - Targeted Arm)"
 
     st.divider()
     
@@ -99,15 +109,16 @@ with st.sidebar:
     st.divider()
     with st.expander("⚙️ Calibration Details", expanded=True):
         
-        # Cho phép sửa số nhưng mặc định theo Mode đã chọn
+        # Target Prevalence (Cho phép chỉnh nhẹ nhưng mặc định là 38%)
         local_prev_pct = st.number_input(
-            "Target Prevalence (%):", 
+            "Target Yield within ROI (%):", 
             min_value=1.0, max_value=99.0, 
             value=DEFAULT_TARGET, 
             step=0.5, format="%.1f"
         )
         
-        # Training Prevalence (DỮ LIỆU CỦA BẠN - 1209 BN)
+        # Training Prevalence (DỮ LIỆU ROI CỦA BẠN - 1209 BN)
+        # Vì bài báo của bạn là ROI-only, con số 45.2% này phải là tỷ lệ dương tính trên ROI
         TRAIN_PREV = 0.452 
         
         # Tính toán
@@ -136,7 +147,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     
-    # Calculate PSA Density for Recommendation
+    # Tính toán PSA Density để dùng cho phần Recommendation
     psa_density = psa / vol
     
     input_dict = {
@@ -227,7 +238,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Threshold: {GRAY_HIGH:.0%}")
 
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", y=1.02, fontsize=12, fontweight='bold', color='#333')
-        plt.title(f"Target Prevalence: {local_prev_pct:.1f}% ({TARGET_DESC})", fontsize=9, color='#666', style='italic', pad=10)
+        plt.title(f"Target Yield (ROI-only): {local_prev_pct:.1f}%", fontsize=9, color='#666', style='italic', pad=10)
         
         ax.set_xlabel("Predicted Probability of csPCa"); ax.set_ylabel("Density")
         ax.set_xlim(0, max(0.6, high_ci + 0.15))
@@ -236,7 +247,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         st.pyplot(fig, dpi=300, use_container_width=False)
         sns.reset_orig()
 
-    # --- DETAILED CLINICAL RECOMMENDATION ---
+    # --- DETAILED CLINICAL RECOMMENDATION (FULL VERSION) ---
     st.subheader("💡 Clinical Recommendation")
     
     # Hiển thị PSAD để bác sĩ tham khảo
@@ -245,9 +256,9 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Interpretation:** The patient has a high probability of harboring clinically significant prostate cancer (ISUP ≥ 2).
-        * **Recommended Action:** * Proceed with **Prostate Biopsy**. 
-            * **Technique:** Guidelines suggest combining **MRI-Targeted Biopsy** (for PI-RADS ≥ 3 lesions) with **Systematic Biopsy** to maximize detection yield.
+        * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
+        * **Recommended Action:** * Proceed with **MRI-Targeted Biopsy**. 
+            * **Technique:** Ensure precise sampling of the ROI. Systematic biopsy may be added if clinically indicated (e.g. multifocal MRI lesions).
         """)
     elif risk_mean >= GRAY_LOW:
         # Tư vấn Gray Zone chi tiết
@@ -256,15 +267,15 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
         * **Interpretation:** Diagnostic uncertainty exists. The risk of csPCa is elevated but not definitive.
         * **Clinical Nuance:** * Check **PSA Density (PSAD)**: Your patient's PSAD is **{psa_density:.2f}**. (Generally, PSAD ≥ 0.15 increases risk).
-            * Consider **Shared Decision Making (SDM)** with the patient regarding the benefits and risks of biopsy.
+            * Consider **Shared Decision Making (SDM)** regarding the benefits and risks of biopsy.
         * **Recommended Action:** * If **PSAD ≥ 0.15** or **PI-RADS 4/5**: Biopsy is strongly favored.
-            * If **PSAD < 0.15** and **PI-RADS 3**: Consider ancillary testing (e.g., Free/Total PSA, PHI, 4Kscore) or short-interval PSA monitoring (3-6 months).
+            * If **PSAD < 0.15** and **PI-RADS 3**: Consider ancillary testing (e.g., PHI, 4Kscore) or short-interval PSA monitoring (3-6 months).
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of csPCa is low.
-        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal and no other high-risk features exist.
+        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of significant cancer in the ROI is low.
+        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal.
             * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
             * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
         """)
