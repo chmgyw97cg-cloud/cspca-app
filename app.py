@@ -226,46 +226,43 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         c2.metric("Lower 95% CI", "N/A")
         c3.metric("Upper 95% CI", "N/A")
 
-   # 4. Uncertainty Visualization (Nature Journal Style - Smaller & Professional Colors)
+  # 4. Uncertainty Visualization (High Contrast Scientific Style)
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         # --- NATURE STYLE SETUP ---
-        # Use 'ticks' style for clean, minimalist look (minimal grid)
-        # 'paper' context adjusts font sizes for publication view
         sns.set_theme(style="ticks", context="paper", font_scale=1.1)
         
-        # --- GIẢM KÍCH THƯỚC ---
-        # figsize=(width, height). Giảm xuống (8, 3) cho gọn.
+        # figsize=(width, height). Giữ kích thước gọn (8, 3)
         fig, ax = plt.subplots(figsize=(8, 3))
 
-        # --- BẢNG MÀU CHUẨN NATURE (Muted/Pastel Tones) ---
-        # Thay vì màu đèn giao thông chói, dùng màu phấn dịu nhẹ.
-        # Tăng alpha lên 0.2 vì màu pastel nhạt hơn.
-        color_low = '#CCEBC5'  # Pale Sage Green (Thay cho xanh lá tươi)
-        color_mid = '#FFEBC2'  # Pale Straw Yellow (Thay cho vàng tươi)
-        color_high = '#FBB4AE' # Pale Salmon Red (Thay cho đỏ tươi)
+        # --- BẢNG MÀU MỚI (HIGH CONTRAST) ---
+        # Dùng tông Xanh Dương - Cam - Đỏ (Blue - Orange - Red)
+        # Đây là bảng màu chuẩn "Paired" giúp phân biệt cực rõ vùng An toàn và Vùng xám
+        color_low = '#a6cee3'  # Light Blue (Thay cho xanh lá - Rất dễ nhìn)
+        color_mid = '#fdbf6f'  # Light Orange (Thay cho vàng nhạt - Tương phản tốt với xanh)
+        color_high = '#fb9a99' # Light Red (Giữ nguyên màu đỏ cảnh báo)
         
         # Background Zones
-        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.2, label='Low Risk Zone', lw=0)
-        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.2, label='Intermediate Zone', lw=0)
-        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.2, label='High Risk Zone', lw=0)
+        ax.axvspan(0, GRAY_LOW, color=color_low, alpha=0.3, label='Low Risk Zone', lw=0)
+        ax.axvspan(GRAY_LOW, GRAY_HIGH, color=color_mid, alpha=0.3, label='Intermediate Zone', lw=0)
+        ax.axvspan(GRAY_HIGH, 1.0, color=color_high, alpha=0.3, label='High Risk Zone', lw=0)
 
-        # Density Plot (Dùng màu xanh đá phiến chuyên nghiệp - Slate Blue)
-        sns.kdeplot(boot_preds, fill=True, color="#324c63", alpha=0.3, ax=ax, linewidth=2)
+        # Density Plot 
+        # Đổi màu đường viền density sang màu Tím than (Dark Slate) để nổi bật trên mọi nền
+        sns.kdeplot(boot_preds, fill=True, color="#2c3e50", alpha=0.4, ax=ax, linewidth=1.5)
         
-        # Indicator Lines (Màu đỏ sẫm chuyên nghiệp - Firebrick)
-        ax.axvline(risk_mean, color="#B22222", linestyle="-", linewidth=2, label=f"Mean Prediction: {risk_mean:.1%}")
-        # Đường ngưỡng màu đen mảnh hơn một chút
+        # Indicator Lines
+        ax.axvline(risk_mean, color="#e31a1c", linestyle="-", linewidth=2, label=f"Mean Prediction: {risk_mean:.1%}")
         ax.axvline(GRAY_HIGH, color="black", linestyle="--", linewidth=1.2, label=f"Biopsy Threshold: {GRAY_HIGH:.0%}")
 
-        # Titles and Subtitles (Dùng hàm title chuẩn thay vì text thủ công để tránh lỗi vị trí)
+        # Titles and Subtitles
         n_boot = len(bootstrap_weights) if bootstrap_weights is not None else 0
         plt.suptitle("Estimated Risk Distribution & Confidence Intervals", 
                      y=1.02, fontsize=12, fontweight='bold', color='#333')
         plt.title(f"Method: Kernel Density Estimation (n = {n_boot} bootstrap iterations)", 
                   fontsize=9, color='#666', style='italic', pad=10)
 
-        # Axis Formatting (Gọn gàng hơn)
+        # Axis Formatting
         ax.set_xlabel("Predicted Probability of csPCa", labelpad=5)
         ax.set_ylabel("Density (Bootstrap)", labelpad=5)
         
@@ -273,18 +270,16 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
         x_max = max(0.6, high_ci + 0.15)
         ax.set_xlim(0, x_max)
         
-        # Legend (Minimalist)
+        # Legend
         ax.legend(loc='upper right', fontsize=8, frameon=True, edgecolor='#e0e0e0', framealpha=0.95, shadow=False)
         
-        # Despine (Bỏ khung trên và phải - Chuẩn báo cáo khoa học)
+        # Despine
         sns.despine(offset=5, trim=True)
         
-        # --- HIỂN THỊ ---
-        # dpi=300: Siêu nét.
-        # use_container_width=False: QUAN TRỌNG! Tắt cái này để hình không bị giãn to ra, giữ nguyên kích thước nhỏ gọn (8x3 inch).
+        # Hiển thị
         st.pyplot(fig, dpi=300, use_container_width=False)
         
-        sns.reset_orig() # Reset theme
+        sns.reset_orig()
 
     # 5. Clinical Recommendation (3 Levels)
     st.subheader("💡 Clinical Recommendation")
