@@ -49,7 +49,10 @@ st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is de
 st.caption("**Scope:** Prediction applies to **MRI-Targeted Biopsy (ROI-only)**.")
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
     st.markdown("""
-    * **Age:** 55 – 75 years | PSA Level:** 0.4 – 50.0 ng/mL | Prostate Volume:** 10 – 110 mL | MRI Requirement:** PI-RADS Max Score ≥ 3.
+    * **Age:** 55 – 75 years.
+    * **PSA Level:** 0.4 – 50.0 ng/mL.
+    * **Prostate Volume:** 10 – 110 mL.
+    * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
     
 with st.sidebar:
