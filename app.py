@@ -5,43 +5,8 @@ import joblib
 from patsy import dmatrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-# --- HÀM VẼ THANH RỦI RO (Helper Function) ---
-def draw_risk_bar(risk_score, threshold=0.20, gray_low=0.10):
-    """Hàm này chịu trách nhiệm vẽ thanh màu HTML"""
-    
-    # 1. Logic chọn màu
-    if risk_score < gray_low:
-        bar_color = "#28a745" # Xanh (Low)
-    elif risk_score < threshold:
-        bar_color = "#ffc107" # Vàng (Intermediate)
-    else:
-        bar_color = "#dc3545" # Đỏ (High)
+import re
 
-    # 2. Tính độ dài thanh (tối đa 100%)
-    bar_width = min(int(risk_score * 100), 100)
-    
-    # 3. Mã HTML (Đã được đóng gói gọn gàng)
-    html_code = f"""
-    <div style="background-color: #e9ecef; border-radius: 10px; padding: 5px; position: relative; margin-bottom: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
-        <div style="position: absolute; left: {gray_low*100}%; top: 0; bottom: 0; border-left: 2px dashed #6c757d; opacity: 0.6;" title="Gray Zone Start"></div>
-        <div style="position: absolute; left: {threshold*100}%; top: 0; bottom: 0; border-left: 3px solid #343a40;" title="Threshold"></div>
-        
-        <div style="width: {bar_width}%; background-color: {bar_color}; height: 30px; border-radius: 6px; 
-                    text-align: right; padding-right: 10px; color: white; font-weight: bold; line-height: 30px; 
-                    text-shadow: 0px 0px 2px rgba(0,0,0,0.5); transition: width 0.6s ease;">
-            {risk_score:.1%}
-        </div>
-    </div>
-    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #6c757d;">
-        <span>0%</span>
-        <span>Gray Zone ({gray_low:.0%}-{threshold:.0%})</span>
-        <span style="font-weight: bold; color: #343a40;">Threshold ({threshold:.0%})</span>
-        <span>100%</span>
-    </div>
-    """
-    
-    # QUAN TRỌNG: Lệnh này giúp biến mã code thành hình ảnh
-    st.markdown(html_code, unsafe_allow_html=True)
 # ==========================================
 # 1. PAGE CONFIGURATION
 # ==========================================
@@ -56,28 +21,25 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
-    # Load the .pkl file located in the same root directory
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
     data_packet = load_prediction_system()
     
-    # Unpack data
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
-    THRESHOLD = data_packet.get("threshold", 0.2)
-    
-    # Retrieve Weights (Crucial for Meta-stacking)
+    # Default to 0.20 if not found
+    THRESHOLD = data_packet.get("threshold", 0.20)
     meta_weights = data_packet.get("meta_weights")
     bootstrap_weights = data_packet.get("bootstrap_weights")
 
     if meta_weights is None:
-        st.error("❌ Error: Model file is outdated. Please re-export the .pkl file containing 'meta_weights'.")
+        st.error("❌ Error: Missing 'meta_weights' in .pkl file.")
         st.stop()
 
 except FileNotFoundError:
-    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found. Please ensure it is in the root directory of your GitHub repo.")
+    st.error("❌ Critical Error: 'cspca_prediction_system.pkl' not found.")
     st.stop()
 except Exception as e:
     st.error(f"❌ Error loading model: {e}")
@@ -87,30 +49,23 @@ except Exception as e:
 # 3. USER INTERFACE
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
-st.markdown(f"**Meta-stacking Ensemble Model (Decision Threshold: {THRESHOLD:.0%})**")
+st.markdown(f"**Meta-stacking Ensemble Model** | Decision Threshold: **{THRESHOLD:.0%}**")
 
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
     st.markdown("""
-    This model is optimized for patients meeting the combined criteria of **ERSPC** and **PCPT** trials:
     * **Age:** 55 – 75 years.
     * **PSA Level:** 0.4 – 50.0 ng/mL.
     * **Prostate Volume:** 10 – 110 mL.
     * **MRI Requirement:** PI-RADS Max Score ≥ 3.
     """)
 
-# --- SIDEBAR: INPUTS ---
 with st.sidebar:
     st.header("📋 Patient Data")
-    
-    # Numeric Inputs
     age = st.number_input("Age (years)", 40, 95, 65)
     psa = st.number_input("Total PSA (ng/mL)", 0.1, 200.0, 7.5, step=0.1)
     vol = st.number_input("Prostate Volume (mL)", 5, 300, 45, step=1)
     pirads = st.selectbox("PI-RADS Max Score (≥3)", [3, 4, 5], index=1)
-    
     st.divider()
-    
-    # Categorical Inputs
     dre_opt = st.radio("Digital Rectal Exam (DRE)", ["Normal", "Abnormal"], horizontal=True)
     fam_opt = st.radio("Family History", ["No", "Yes", "Unknown"], horizontal=True)
     biopsy_opt = st.radio("Biopsy History", ["Naïve", "Prior Negative"], horizontal=True)
@@ -124,78 +79,44 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     
-    # Create Input DataFrame (Mapping user input to model features)
     input_dict = {
-        "age": [age],
-        "PSA": [psa],
-        "log_PSA": [log_psa_val],
-        "log_vol": [log_vol_val],
-        "pirads_max": [pirads],
-        
-        # Binary/One-Hot mappings
-        "tr_yes": [1 if dre_opt == "Abnormal" else 0],
-        "fam_yes": [1 if fam_opt == "Yes" else 0],
+        "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
+        "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0], 
         "atcd_yes": [1 if biopsy_opt == "Prior Negative" else 0],
-        
-        # Label encoded mappings (for Trees)
-        "tr": [1 if dre_opt == "Abnormal" else 0],
+        "tr": [1 if dre_opt == "Abnormal" else 0], 
         "fam": [1 if fam_opt == "Yes" else (2 if fam_opt == "Unknown" else 0)],
         "atcd": [1 if biopsy_opt == "Prior Negative" else 0],
-        
-        # 'Unknown' columns
-        "fam_unknown": [1 if fam_opt == "Unknown" else 0],
-        "tr_unknown": [0],
-        "atcd_unknown": [0]
+        "fam_unknown": [1 if fam_opt == "Unknown" else 0], "tr_unknown": [0], "atcd_unknown": [0]
     }
     df_input = pd.DataFrame(input_dict)
     
-   # --- B. Spline Logic (FIXED NAMES & BOUNDS) ---
+    # --- B. Spline Logic (Safety Fix + Renaming) ---
     try:
-        # 1. Tính toán biên an toàn
         safe_lb = min(knots) - 5.0
         safe_ub = max(knots) + 5.0
-        
-        # 2. Tạo Spline với biên an toàn
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
+        spline_df = dmatrix(spline_formula, 
+                           {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, 
+                           return_type="dataframe")
         
-        spline_df = dmatrix(
-            spline_formula, 
-            {
-                "log_PSA": df_input["log_PSA"], 
-                "knots": knots,
-                "lb": safe_lb,
-                "ub": safe_ub
-            }, 
-            return_type="dataframe"
-        )
-        
-        # 3. SỬA LỖI TÊN CỘT (QUAN TRỌNG)
-        # Model Lasso mong đợi tên cột cũ (không có lower_bound=...), ta phải đổi tên lại cho khớp.
-        new_column_names = {}
+        # Regex renaming to match training names
+        rename_map = {}
         for col in spline_df.columns:
-            if "Intercept" in col:
-                continue # Intercept xử lý sau
-            
-            # Lấy chỉ số đuôi [0], [1], [2]...
-            if "[" in col and "]" in col:
-                idx = col.split("[")[-1].split("]")[0] 
-                # Tạo lại tên chuẩn mà Model đã học lúc train
+            if "Intercept" in col: continue
+            match = re.search(r"\[(\d+)\]$", col)
+            if match:
+                idx = match.group(1)
                 original_name = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
-                new_column_names[col] = original_name
-        
-        # Áp dụng đổi tên
-        spline_df = spline_df.rename(columns=new_column_names)
+                rename_map[col] = original_name
+        spline_df = spline_df.rename(columns=rename_map)
 
-        # 4. Xử lý Intercept (Dựa theo lỗi báo thiếu Intercept)
-        # Nếu model cần Intercept, ta thêm cột Intercept = 1.0 thủ công
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
             
-        # 5. Ghép vào DataFrame chính
         df_full = pd.concat([df_input, spline_df], axis=1)
 
     except Exception as e:
-        st.error(f"Spline Error: {e}")
+        st.error(f"Spline Processing Error: {e}")
         st.stop()
 
     # --- C. Prediction Loop ---
@@ -204,22 +125,18 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     
     for name in model_names:
         model = base_models[name]
-        
-        # Select correct columns for this specific model
         if name in feature_mapping:
             required_cols = feature_mapping[name]
         else:
-            required_cols = df_full.columns.tolist() # Fallback
+            required_cols = df_full.columns.tolist()
             
-        # Check for missing columns
         missing = [c for c in required_cols if c not in df_full.columns]
         if missing:
-            st.error(f"Model '{name}' missing columns: {missing}")
+            st.error(f"❌ Model '{name}' missing columns: {missing}")
             st.stop()
             
-        # Predict
-        X_subset = df_full[required_cols]
         try:
+            X_subset = df_full[required_cols]
             if hasattr(model, "predict_proba"):
                 p = model.predict_proba(X_subset)[:, 1][0]
             else:
@@ -230,23 +147,19 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
             st.stop()
     
     base_preds = np.array(base_preds)
-
-    # --- D. Meta-Prediction (Weighted Average) ---
-    # Dot product of predictions and meta-weights
+    
+    # --- D. Meta-Prediction ---
     risk_mean = np.dot(base_preds, meta_weights)
     
-    # Calculate Confidence Intervals using Bootstrap Weights
     if bootstrap_weights is not None:
         boot_preds = np.dot(bootstrap_weights, base_preds)
-        low_ci = np.percentile(boot_preds, 2.5)
-        high_ci = np.percentile(boot_preds, 97.5)
+        low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
     else:
-        low_ci = risk_mean
-        high_ci = risk_mean
+        low_ci, high_ci = risk_mean, risk_mean
         has_ci = False
 
-  # ==========================================
+    # ==========================================
     # 5. OUTPUT DISPLAY (FINAL ENGLISH VERSION)
     # ==========================================
     st.divider()
@@ -292,6 +205,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     bar_width = min(int(risk_mean * 100), 100)
     
     # Custom HTML Progress Bar
+    # NOTE: unsafe_allow_html=True is REQUIRED for this to render as a bar instead of code
     st.markdown(f"""
     <div style="background-color: #e9ecef; border-radius: 10px; padding: 5px; position: relative; margin-bottom: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
         <div style="position: absolute; left: {GRAY_LOW*100}%; top: 0; bottom: 0; border-left: 2px dashed #6c757d; opacity: 0.6;" title="Start of Gray Zone (10%)"></div>
@@ -312,6 +226,7 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     """, unsafe_allow_html=True)
 
     # 5. Uncertainty Visualization (Matplotlib)
+    
     st.write("### 🔍 Uncertainty Visualization")
     if has_ci:
         fig, ax = plt.subplots(figsize=(10, 3))
