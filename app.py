@@ -44,7 +44,7 @@ except Exception as e:
 # ==========================================
 st.title("🛡️ csPCa Risk & Uncertainty Analysis")
 
-st.markdown("**Standardized Stacking Ensemble** | Clinical Decision Support")
+st.markdown("**Standardized Meta-Stacking Ensemble** | Clinical Decision Support")
 st.caption("**Definition:** csPCa (Clinically Significant Prostate Cancer) is defined as **ISUP Grade Group ≥ 2**.")
 st.caption("**Scope:** Prediction applies to **MRI-Targeted Biopsy (ROI-only)**.")
 with st.expander("📚 Clinical Standards & Inclusion Criteria", expanded=False):
