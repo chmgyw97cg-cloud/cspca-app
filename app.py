@@ -229,21 +229,29 @@ if st.button("🚀 RUN ANALYSIS", type="primary"):
     st.subheader("💡 Clinical Recommendation")
     st.caption(f"**Calculated PSA Density (PSAD):** {psa_density:.2f} ng/mL²")
 
-       if risk_mean >= GRAY_HIGH:
+     if risk_mean >= GRAY_HIGH:
         st.error(f"""
         **🔴 HIGH RISK (≥ {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Strong indication for **mpMRI** and **Targeted Biopsy**.
+        * **Interpretation:** High probability of csPCa within the Region of Interest (ROI).
+        * **Recommended Action:** * Proceed with **MRI-Targeted Biopsy**. 
+            * **Technique:** Ensure precise sampling of the ROI. Systematic biopsy may be added if clinically indicated.
         """)
     elif risk_mean >= GRAY_LOW:
+        # Tư vấn Gray Zone chi tiết
         st.warning(f"""
-        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Consider **Shared Decision Making**. Evaluate secondary factors (e.g., **PSA Density**, Free/Total PSA) before deciding on biopsy.
+        **🟡 INTERMEDIATE RISK ({GRAY_LOW:.0%} - {GRAY_HIGH:.0%}) - The 'Gray Zone'**
+        * **Interpretation:** Equivocal risk in the ROI.
+        * **Action:** Use **PSA Density (PSAD)** to stratify:
+            * **PSAD ≥ 0.15:** Favors Biopsy.
+            * **PSAD < 0.15:** Consider surveillance or ancillary tests (PHI, 4Kscore).
         """)
     else:
         st.success(f"""
         **🟢 LOW RISK (< {GRAY_LOW:.0%})**
-        * **Probability:** {risk_mean:.1%} (CI: {low_ci:.1%} - {high_ci:.1%}).
-        * **Action:** Immediate biopsy may be avoided. Continue **PSA Monitoring**.
+        * **Interpretation:** High Negative Predictive Value (NPV). The likelihood of significant cancer in the ROI is low.
+        * **Recommended Action:** * **Avoid Immediate Biopsy**: Provided DRE is normal.
+            * **Surveillance:** Continue PSA monitoring (e.g., every 6-12 months).
+            * **Safety Net:** Re-evaluate if PSA velocity increases (>0.75 ng/mL/year) or MRI findings progress.
         """)
+    
+    st.info("**Reference:** Kasivisvanathan V, et al. *MRI-Targeted or Standard Biopsy for Prostate-Cancer Diagnosis* (PRECISION Trial). NEJM 2018.")
