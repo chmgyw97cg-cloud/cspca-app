@@ -99,12 +99,20 @@ with st.sidebar:
 if st.button("🚀 RUN ANALYSIS", type="primary"):
     # 0. CLINICAL VALIDATION
     warnings = []
-    if not (55 <= age <= 75): warnings.append(f"⚠️ **Age ({age})** outside 55-75.")
-    if not (0.4 <= psa <= 50.0): warnings.append(f"⚠️ **PSA ({psa})** outside 0.4-50.0.")
-    if not (10 <= vol <= 110): warnings.append(f"⚠️ **Prostate Volume ({vol})** outside 10-110.")
+    if not (55 <= age <= 75):
+        warnings.append(f"⚠️ **Age ({age})** is outside the model's primary range (55-75).")
+    if not (0.4 <= psa <= 50.0):
+        warnings.append(f"⚠️ **PSA ({psa:.1f})** is outside the model's primary range (0.4-50.0).")
+    if not (10 <= vol <= 110):
+        warnings.append(f"⚠️ **Prostate Volume ({vol:.1f})** is outside the model's primary range (10-110).")
+    
     if warnings:
-        with st.warning("### ⚠️ Clinical Warning: Out of Distribution"):
-            for w in warnings: st.markdown(f"* {w}")
+        # Sử dụng container riêng để đảm bảo hiển thị nổi bật
+        with st.container():
+            st.warning("### ⚠️ Clinical Warning: Out of Distribution")
+            for w in warnings:
+                st.markdown(w)
+            st.caption("The prediction may be less reliable for patients outside these criteria.")
                 
     # 1. PRE-PROCESSING
     log_psa_val = np.log(psa)
