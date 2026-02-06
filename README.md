@@ -1,3 +1,7 @@
+# Prostate Cancer Prediction App (csPCa-Risk)
+**Current Version: v1.1.1 (Supports Vietnamese, French & English)**
+**Last Updated:** 6 Feb 2026
+
 🛡️ csPCa Risk Assistant (ROI-Targeted)
 A Meta-stacking Ensemble and Uncertainty-Aware Framework for Clinical Decision Support
 
