@@ -61,21 +61,22 @@ TRANS = {
         "res_uncert": "**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% CI is **{:.1%}** to **{:.1%}** (uncertainty spread: **{:.1%}**). **A narrower distribution reflects higher model confidence**.",
         "plot_title": "🔍 Risk Probability Distribution",
         "plot_xlabel": "Predicted Probability of csPCa",
-        "plot_ylabel": "Probability density",
+        "plot_ylabel": "Frequency (Likelihood)",
         "plot_legend_dist": "Risk Distribution",
-        "plot_legend_point": "Point Estimate"
+        "plot_legend_point": "Point Estimate",
+        "res_psad": "Calculated PSA Density (PSAD):"
     },
     "🇫🇷 Français": {
         "title": "🛡️ Analyse de Risque csPCa & Incertitude",
         "subtitle": "**Ensemble Meta-Stacking Standardisé** | Aide à la Décision Médicale",
-        "def": "**Définition :** csPCa (Cancer de la Prostate Cliniquement Significatif) défini par **ISUP Grade Group ≥ 2**.",
-        "scope": "**Portée :** Prédiction applicable à la **Biopsie Ciblée par IRM (ROI uniquement)**.",
-        "expander_title": "📚 Standards Cliniques & Critères d'Inclusion",
+        "def": "**Définition :** csPCa (Cancer cliniquement significatif) défini par **ISUP Grade Group ≥ 2**.",
+        "scope": "**Portée :** Applicable aux **biopsies ciblées par IRM (ROI uniquement)**.",
+        "expander_title": "📚 Critères d'Inclusion & Standards",
         "expander_content": """
         * **Âge :** 55 – 75 ans.
-        * **Taux de PSA :** 0.4 – 50.0 ng/mL.
+        * **PSA Total :** 0.4 – 50.0 ng/mL.
         * **Volume Prostatique :** 10 – 110 mL.
-        * **Critère IRM :** Score PI-RADS Max ≥ 3.
+        * **IRM :** Score PI-RADS Max ≥ 3.
         """,
         "sidebar_header": "📋 Données Patient",
         "lbl_age": "Âge (ans)",
@@ -83,35 +84,36 @@ TRANS = {
         "lbl_vol": "Volume Prostatique (mL)",
         "lbl_pirads": "Score PI-RADS Max (≥3)",
         "lbl_dre": "Toucher Rectal (TR)",
-        "opt_dre": ["Normal", "Anormal", "Inconnu"],
+        "opt_dre": ["Normal", "Anormal (Suspect)", "Inconnu"],
         "lbl_fam": "Antécédents Familiaux",
         "opt_fam": ["Non", "Oui", "Inconnu"],
-        "lbl_biopsy": "Historique de Biopsie",
-        "opt_biopsy": ["Première biopsie (Naïf)", "Négative Précédente", "Inconnu"],
-        "calib_title": "⚙️ Détails de Calibrage",
-        "calib_desc": "**Standard : Essai PRECISION**\n\nRendement standard pour la biopsie ciblée IRM (ROI) chez les hommes avec PI-RADS ≥ 3.",
-        "calib_input": "Taux de positivité des biopsies:",
-        "calib_info": "✅ Ajusté :",
+        "lbl_biopsy": "Antécédents de Biopsie",
+        "opt_biopsy": ["Première biopsie (Naïf)", "Négative antérieure", "Inconnu"],
+        "calib_title": "⚙️ Calibrage du Modèle",
+        "calib_desc": "**Référence : Essai PRECISION**\n\nTaux de détection attendu pour les biopsies ciblées (ROI) chez les patients PI-RADS ≥ 3.",
+        "calib_input": "Taux de positivité des biopsies (%):",
+        "calib_info": "✅ Ajusté sur :",
         "btn_run": "🚀 LANCER L'ANALYSE",
-        "warn_age": "⚠️ **Âge ({})** est hors de la plage primaire du modèle (55-75).",
-        "warn_psa": "⚠️ **PSA ({:.1f})** est hors de la plage primaire du modèle (0.4-50.0).",
-        "warn_vol": "⚠️ **Volume ({:.1f})** est hors de la plage primaire du modèle (10-110).",
-        "warn_title": "### ⚠️ Avertissement Clinique : Hors Distribution",
-        "warn_footer": "La prédiction peut être moins fiable pour les patients hors de ces critères.",
+        "warn_age": "⚠️ **Âge ({})** hors des critères principaux (55-75).",
+        "warn_psa": "⚠️ **PSA ({:.1f})** hors des critères principaux (0.4-50.0).",
+        "warn_vol": "⚠️ **Volume ({:.1f})** hors des critères principaux (10-110).",
+        "warn_title": "### ⚠️ Avertissement Clinique : Hors Critères",
+        "warn_footer": "La fiabilité de la prédiction peut être réduite hors de ces critères.",
         "res_title": "📊 Évaluation Quantitative",
-        "res_risk": "Risque Prédit",
+        "res_risk": "Risque Estimé",
         "res_low": "IC 95% Inf",
         "res_high": "IC 95% Sup",
-        "res_interp": "**Interprétation :** Le modèle prédit une probabilité de **{:.1%}** de csPCa dans la ROI.",
-        "res_uncert": "**Note d'Incertitude :** Basé sur 1 000 simulations bootstrap, l'IC 95% est de **{:.1%}** à **{:.1%}** (écart : **{:.1%}**). **Une distribution plus étroite reflète une confiance plus élevée**.",
+        "res_interp": "**Interprétation :** Le modèle prédit une probabilité de **{:.1%}** de csPCa dans la cible (ROI).",
+        "res_uncert": "**Note sur l'incertitude :** Basé sur 1 000 simulations bootstrap, l'IC 95% s'étend de **{:.1%}** à **{:.1%}** (écart : **{:.1%}**). **Un intervalle étroit indique une fiabilité accrue**.",
         "plot_title": "🔍 Distribution de Probabilité du Risque",
         "plot_xlabel": "Probabilité prédite de csPCa",
-        "plot_ylabel": "Densité de la distribution bootstrap",
+        "plot_ylabel": "Fréquence d'apparition",
         "plot_legend_dist": "Distribution du Risque",
-        "plot_legend_point": "Estimation Ponctuelle"
+        "plot_legend_point": "Estimation Ponctuelle",
+        "res_psad": "Densité de PSA calculée (PSAD) :"
     },
     "🇻🇳 Tiếng Việt": {
-        "title": "🛡️ Phân tích Nguy cơ Ung thư tuyến tiền liệt có ý nghĩa lâm sàng & Độ bất định",
+        "title": "🛡️ Phân tích Nguy cơ & Độ bất định csPCa",
         "subtitle": "**Mô hình Meta-Stacking Ensemble** | Hỗ trợ Ra quyết định Lâm sàng",
         "def": "**Định nghĩa:** csPCa (Ung thư tiền liệt tuyến có ý nghĩa lâm sàng) được định nghĩa là **ISUP Grade Group ≥ 2**.",
         "scope": "**Phạm vi:** Dự báo áp dụng cho **Sinh thiết trúng đích MRI (chỉ vùng ROI)**.",
@@ -127,16 +129,16 @@ TRANS = {
         "lbl_psa": "PSA Toàn phần (ng/mL)",
         "lbl_vol": "Thể tích Tuyến tiền liệt (mL)",
         "lbl_pirads": "Điểm PI-RADS Max (≥3)",
-        "lbl_dre": "Thăm trực tràng",
+        "lbl_dre": "Thăm trực tràng (DRE)",
         "opt_dre": ["Bình thường", "Bất thường", "Không rõ"],
         "lbl_fam": "Tiền sử Gia đình",
         "opt_fam": ["Không", "Có", "Không rõ"],
         "lbl_biopsy": "Tiền sử Sinh thiết",
         "opt_biopsy": ["Chưa từng (Naïve)", "Đã từng (Âm tính)", "Không rõ"],
-        "calib_title": "⚙️ Hiệu chỉnh (Calibration)",
-        "calib_desc": "**Tiêu chuẩn: Thử nghiệm PRECISION**\n\nTỷ lệ phát hiện chuẩn cho sinh thiết trúng đích MRI (ROI) ở bệnh nhân PI-RADS ≥ 3.",
-        "calib_input": "Tỷ lệ hiện mắc tại cơ sở (%):",
-        "calib_info": "✅ Đã hiệu chỉnh:",
+        "calib_title": "⚙️ Hiệu chỉnh mô hình (Calibration)",
+        "calib_desc": "**Tiêu chuẩn: Thử nghiệm PRECISION**\n\nTỷ lệ phát hiện ung thư trung bình (Yield) đối với sinh thiết trúng đích MRI (nhóm PI-RADS ≥ 3).",
+        "calib_input": "Tỷ lệ dương tính sinh thiết (%):",
+        "calib_info": "✅ Đã hiệu chỉnh theo:",
         "btn_run": "🚀 CHẠY PHÂN TÍCH",
         "warn_age": "⚠️ **Tuổi ({})** nằm ngoài phạm vi chính của mô hình (55-75).",
         "warn_psa": "⚠️ **PSA ({:.1f})** nằm ngoài phạm vi chính của mô hình (0.4-50.0).",
@@ -151,9 +153,10 @@ TRANS = {
         "res_uncert": "**Ghi chú về Độ bất định:** Dựa trên 1,000 mô phỏng bootstrap, khoảng tin cậy (CI) 95% là từ **{:.1%}** đến **{:.1%}** (độ rộng phân tán: **{:.1%}**). **Phân phối càng hẹp thể hiện độ tin cậy của mô hình càng cao**.",
         "plot_title": "🔍 Phân phối Xác suất Nguy cơ",
         "plot_xlabel": "Xác suất Dự báo csPCa",
-        "plot_ylabel": "Mật độ phân phối",
+        "plot_ylabel": "Tần suất xuất hiện",
         "plot_legend_dist": "Phân phối Nguy cơ",
-        "plot_legend_point": "Điểm Ước lượng"
+        "plot_legend_point": "Điểm Ước lượng",
+        "res_psad": "Mật độ PSA (PSAD):"
     }
 }
 
@@ -184,7 +187,6 @@ except Exception as e:
 # ==========================================
 
 # --- LANGUAGE SELECTOR (TOP RIGHT) ---
-# Sử dụng cột để đẩy nút chọn sang bên phải
 col_header, col_lang = st.columns([6, 2])
 
 with col_lang:
@@ -193,7 +195,7 @@ with col_lang:
         "Language / Langue / Ngôn ngữ", 
         ["🇬🇧 English", "🇫🇷 Français", "🇻🇳 Tiếng Việt"], 
         index=0,
-        label_visibility="collapsed" # Ẩn nhãn cho gọn
+        label_visibility="collapsed"
     )
 
 # Lấy từ điển ngôn ngữ hiện tại
@@ -220,7 +222,6 @@ with st.sidebar:
     st.divider()
     
     # Logic xử lý lựa chọn ngôn ngữ cho Radio button
-    # Vì giá trị trả về là Text đã dịch, ta cần map ngược lại về giá trị Logic tiếng Anh để tính toán
     
     # DRE
     dre_display = st.radio(T["lbl_dre"], T["opt_dre"], horizontal=True)
@@ -345,7 +346,7 @@ if st.button(T["btn_run"], type="primary"):
         T["res_uncert"].format(low_ci, high_ci, high_ci - low_ci)
     )
 
-    # --- UNCERTAINTY VISUALIZATION (TRANSLATED) ---
+    # --- UNCERTAINTY VISUALIZATION ---
     st.write(f"### {T['plot_title']}")
     if has_ci:
         sns.set_theme(style="whitegrid", context="paper")
@@ -358,7 +359,7 @@ if st.button(T["btn_run"], type="primary"):
         ax.axvline(risk_mean, color="#d95f02", linestyle="-", linewidth=2.5, label=f"{T['plot_legend_point']}: {risk_mean:.1%}")
         
         # Formatting
-        plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15) # Giữ tiêu đề kỹ thuật tiếng Anh hoặc đổi nếu muốn
+        plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15)
         ax.set_xlabel(T["plot_xlabel"], fontsize=10)
         ax.set_ylabel(T["plot_ylabel"], fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
@@ -367,4 +368,4 @@ if st.button(T["btn_run"], type="primary"):
         sns.despine()
         st.pyplot(fig, dpi=300)
         
-    st.caption(f"**Calculated PSA Density (PSAD):** {psad:.2f} ng/mL²")
+    st.caption(f"**{T['res_psad']}** {psad:.2f} ng/mL²")
