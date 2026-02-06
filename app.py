@@ -127,7 +127,7 @@ TRANS = {
         "lbl_psa": "PSA Toàn phần (ng/mL)",
         "lbl_vol": "Thể tích Tuyến tiền liệt (mL)",
         "lbl_pirads": "Điểm PI-RADS Max (≥3)",
-        "lbl_dre": "Thăm trực tràng (DRE)",
+        "lbl_dre": "Thăm trực tràng",
         "opt_dre": ["Bình thường", "Bất thường", "Không rõ"],
         "lbl_fam": "Tiền sử Gia đình",
         "opt_fam": ["Không", "Có", "Không rõ"],
