@@ -107,7 +107,7 @@ TRANS = {
         "res_uncert": "**Note sur l'incertitude :** Basé sur 1 000 simulations bootstrap, l'IC 95% s'étend de **{:.1%}** à **{:.1%}** (écart : **{:.1%}**). **Un intervalle étroit indique une fiabilité accrue**.",
         "plot_title": "🔍 Distribution de Probabilité du Risque",
         "plot_xlabel": "Probabilité prédite de csPCa",
-        "plot_ylabel": "Fréquence d'apparition",
+        "plot_ylabel": "Densité de probabilité",
         "plot_legend_dist": "Distribution du Risque",
         "plot_legend_point": "Estimation Ponctuelle",
         "res_psad": "Densité de PSA calculée (PSAD) :"
