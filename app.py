@@ -261,7 +261,8 @@ with st.sidebar:
         
         st.info(f"{T['calib_info']} **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
 
-
+        st.divider()
+        st.caption("© 2026 Copyright by Authors")
 # ==========================================
 # 5. PREDICTION LOGIC
 # ==========================================
