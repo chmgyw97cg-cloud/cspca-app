@@ -61,7 +61,7 @@ TRANS = {
         "res_uncert": "**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% CI is **{:.1%}** to **{:.1%}** (uncertainty spread: **{:.1%}**). **A narrower distribution reflects higher model confidence**.",
         "plot_title": "🔍 Risk Probability Distribution",
         "plot_xlabel": "Predicted Probability of csPCa",
-        "plot_ylabel": "Frequency (Likelihood)",
+        "plot_ylabel": "Probability density",
         "plot_legend_dist": "Risk Distribution",
         "plot_legend_point": "Point Estimate",
         "res_psad": "Calculated PSA Density (PSAD):"
