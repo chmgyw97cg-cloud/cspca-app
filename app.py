@@ -5,7 +5,6 @@ import joblib
 from patsy import dmatrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-import re
 
 # ==========================================
 # 1) PAGE CONFIGURATION
@@ -17,7 +16,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2) LANGUAGE DICTIONARY  (MUST be defined BEFORE using it)
+# 2) LANGUAGE DICTIONARY (must exist before use)
 # ==========================================
 TRANS = {
     "🇬🇧 English": {
@@ -161,12 +160,15 @@ TRANS = {
 }
 
 # ==========================================
-# 3) MODEL LOADING (DE + ORDER + FALLBACK)
+# 3) MODEL LOADING (DE + ORDER + DEFENSIVE)
 # ==========================================
 @st.cache_resource
 def load_prediction_system(_version="v1"):
-    # bump _version to force cache refresh when you update the pkl
+    # bump _version to force cache refresh
     return joblib.load("cspca_prediction_system.pkl")
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
 
 def _as_float(x, default=0.0) -> float:
     try:
@@ -175,43 +177,30 @@ def _as_float(x, default=0.0) -> float:
     except Exception:
         return float(default)
 
-def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
-
 try:
-    data_packet = load_prediction_system("v2")  # change tag when you upload new PKL
+    # change "v3" whenever you upload new PKL
+    data_packet = load_prediction_system("v3")
 
-    base_models = data_packet["base_models"]                      # fitted models/pipelines
-    knots = np.asarray(data_packet["spline_knots"], dtype=float)  # knots array
+    base_models = data_packet["base_models"]                      # fitted
+    knots = np.asarray(data_packet["spline_knots"], dtype=float)
     feature_mapping = data_packet.get("model_features", {}) or {}
     THRESHOLD = float(data_packet.get("threshold", 0.20))
 
-    # DE (main model)
+    # DE
     de_weights = data_packet.get("de_weights", None)
-    if de_weights is not None:
-        de_weights = np.asarray(de_weights, dtype=float)
+    de_weights = np.asarray(de_weights, dtype=float) if de_weights is not None else None
 
-    de_weights_matrix = data_packet.get("de_weights_matrix", None)  # optional: bootstrap DE weights
-    if de_weights_matrix is not None:
-        de_weights_matrix = np.asarray(de_weights_matrix, dtype=float)
+    de_weights_matrix_boot = data_packet.get("de_weights_matrix_boot", None)
+    de_weights_matrix_boot = np.asarray(de_weights_matrix_boot, dtype=float) if de_weights_matrix_boot is not None else None
 
     model_names_ordered = data_packet.get("model_names_ordered", None)
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    # fallback logistic meta (legacy)
+    # optional legacy fallback (not used unless DE missing)
     meta_weights = data_packet.get("meta_weights", None)
-    if meta_weights is not None:
-        meta_weights = np.asarray(meta_weights, dtype=float)
+    meta_weights = np.asarray(meta_weights, dtype=float) if meta_weights is not None else None
     meta_intercept = _as_float(data_packet.get("meta_intercept", 0.0), default=0.0)
-
-    # legacy bootstrap (logistic meta) – optional
-    bootstrap_weights = data_packet.get("bootstrap_weights", None)
-    bootstrap_intercepts = data_packet.get("bootstrap_intercepts", None)
-    if bootstrap_weights is not None:
-        bootstrap_weights = np.asarray(bootstrap_weights, dtype=float)
-    if bootstrap_intercepts is not None:
-        bootstrap_intercepts = np.asarray(bootstrap_intercepts, dtype=float).reshape(-1)
 
     if de_weights is None and meta_weights is None:
         st.error("❌ Missing weights in .pkl (need de_weights or meta_weights).")
@@ -297,14 +286,15 @@ with st.sidebar:
 # 6) Prediction logic
 # ==========================================
 if st.button(T["btn_run"], type="primary"):
-    # Warnings
+
+    # warnings
     warnings = []
     if not (55 <= age <= 75):
         warnings.append(T["warn_age"].format(age))
-    if not (0.4 <= psa <= 50.0):
-        warnings.append(T["warn_psa"].format(psa))
-    if not (10 <= vol <= 110):
-        warnings.append(T["warn_vol"].format(vol))
+    if not (0.4 <= float(psa) <= 50.0):
+        warnings.append(T["warn_psa"].format(float(psa)))
+    if not (10 <= float(vol) <= 110):
+        warnings.append(T["warn_vol"].format(float(vol)))
 
     if warnings:
         st.warning(T["warn_title"])
@@ -312,15 +302,16 @@ if st.button(T["btn_run"], type="primary"):
             st.markdown(w)
         st.caption(T["warn_footer"])
 
-    # Basic features
-    psa = float(psa); vol = float(vol)
-    log_psa_val = np.log(psa)
-    log_vol_val = np.log(vol)
-    psad = psa / vol
+    # basic features
+    psa_f = float(psa)
+    vol_f = float(vol)
+    log_psa_val = np.log(psa_f)
+    log_vol_val = np.log(vol_f)
+    psad = psa_f / vol_f
 
     input_dict = {
         "age": [int(age)],
-        "PSA": [psa],
+        "PSA": [psa_f],
         "log_PSA": [log_psa_val],
         "log_vol": [log_vol_val],
         "pirads_max": [int(pirads)],
@@ -339,7 +330,7 @@ if st.button(T["btn_run"], type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
 
-    # Spline + FORCE-ALIAS
+    # spline + FORCE-ALIAS by position
     try:
         safe_lb, safe_ub = float(np.min(knots) - 5.0), float(np.max(knots) + 5.0)
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
@@ -349,13 +340,11 @@ if st.button(T["btn_run"], type="primary"):
             return_type="dataframe"
         )
 
-        # ensure Intercept
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
 
         df_full = pd.concat([df_input, spline_df], axis=1)
 
-        # FORCE-ALIAS by position (basis columns only)
         basis_df = spline_df.copy()
         if "Intercept" in basis_df.columns:
             basis_df = basis_df.drop(columns=["Intercept"])
@@ -365,13 +354,16 @@ if st.button(T["btn_run"], type="primary"):
 
         for k in range(K):
             expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
-            df_full[expected] = basis_df.iloc[:, k].values
+            if expected not in df_full.columns:
+                df_full[expected] = basis_df.iloc[:, k].values
+
+        df_full.columns = [str(c) for c in df_full.columns]
 
     except Exception as e:
         st.error(f"Spline Error: {e}")
         st.stop()
 
-    # Base models inference (ordered)
+    # base models inference (ordered)
     loop_names = model_names_ordered if model_names_ordered is not None else list(base_models.keys())
     loop_names = [m for m in list(loop_names) if m in base_models]
 
@@ -379,14 +371,14 @@ if st.button(T["btn_run"], type="primary"):
     for name in loop_names:
         model = base_models[name]
         cols = feature_mapping.get(name, df_full.columns.tolist())
-        cols = list(cols)
+        cols = [str(c) for c in list(cols)]
 
         missing = [c for c in cols if c not in df_full.columns]
         if missing:
-            st.error(f"Model '{name}' missing columns (up to 12): {missing[:12]}{'...' if len(missing) > 12 else ''}")
+            st.error(f"Model '{name}' missing columns (up to 12): {missing[:12]}{'...' if len(missing)>12 else ''}")
             st.stop()
 
-        X = df_full.loc[:, cols]  # enforce feature order
+        X = df_full.loc[:, cols]  # enforce order
         try:
             if hasattr(model, "predict_proba"):
                 p = float(model.predict_proba(X)[0, 1])
@@ -400,65 +392,59 @@ if st.button(T["btn_run"], type="primary"):
 
     base_preds = np.asarray(base_preds, dtype=float)
 
-    # Meta prediction
-    used_method = "DE" if de_weights is not None else "LOGISTIC_FALLBACK"
+    # meta prediction (DE point estimate)
     if de_weights is not None:
         if len(de_weights) != len(base_preds):
-            st.error(f"❌ Weight mismatch: de_weights has {len(de_weights)} but got {len(base_preds)} base preds.")
+            st.error(f"❌ Weight mismatch: de_weights={len(de_weights)} vs base_preds={len(base_preds)}.")
             st.stop()
 
         p_de = float(np.dot(base_preds, de_weights))
         p_de = float(np.clip(p_de, 1e-6, 1 - 1e-6))
         log_odds_de = np.log(p_de / (1.0 - p_de))
         risk_mean = float(sigmoid(log_odds_de + CALIBRATION_OFFSET))
+        used_method = "DE"
     else:
         raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
         risk_mean = float(sigmoid(raw_log_odds + CALIBRATION_OFFSET))
+        used_method = "LOGISTIC_FALLBACK"
 
-    # CI (prefer DE bootstrap if available)
+    # CI: prefer DE-bootstrap matrix if available
     has_ci = False
     low_ci = high_ci = risk_mean
     boot_preds = None
+    ci_source = "N/A"
 
     try:
-        if de_weights_matrix is not None:
-            # bootstrap via DE weights distribution
-            W = np.asarray(de_weights_matrix, dtype=float)
+        if de_weights_matrix_boot is not None:
+            W = np.asarray(de_weights_matrix_boot, dtype=float)  # (1000, 6)
             if W.ndim != 2 or W.shape[1] != len(base_preds):
-                raise ValueError(f"de_weights_matrix shape {W.shape} incompatible with {len(base_preds)} base preds.")
-            # convex probs
+                raise ValueError(f"de_weights_matrix_boot shape {W.shape} incompatible with {len(base_preds)} base preds.")
+
             p_boot = W @ base_preds
             p_boot = np.clip(p_boot, 1e-6, 1 - 1e-6)
             log_odds_boot = np.log(p_boot / (1.0 - p_boot)) + CALIBRATION_OFFSET
             boot_preds = sigmoid(log_odds_boot)
-            low_ci = float(np.percentile(boot_preds, 2.5))
-            high_ci = float(np.percentile(boot_preds, 97.5))
-            # ensure brackets point estimate
-            low_ci = min(low_ci, risk_mean)
-            high_ci = max(high_ci, risk_mean)
-            has_ci = True
 
-        elif bootstrap_weights is not None:
-            # legacy logistic bootstrap CI
-            boot_log_odds = np.dot(bootstrap_weights, base_preds)
-            if bootstrap_intercepts is not None and len(bootstrap_intercepts) == boot_log_odds.shape[0]:
-                boot_log_odds = boot_log_odds + bootstrap_intercepts
-            boot_preds = sigmoid(boot_log_odds + CALIBRATION_OFFSET)
             low_ci = float(np.percentile(boot_preds, 2.5))
             high_ci = float(np.percentile(boot_preds, 97.5))
+
+            # ensure CI brackets point estimate
             low_ci = min(low_ci, risk_mean)
             high_ci = max(high_ci, risk_mean)
+
             has_ci = True
+            ci_source = "DE bootstrap (1000 resamples)"
+        else:
+            has_ci = False
 
     except Exception as e:
-        st.warning(f"Bootstrap CI unavailable: {e}")
+        st.warning(f"DE-bootstrap CI unavailable: {e}")
         has_ci = False
         low_ci = high_ci = risk_mean
         boot_preds = None
+        ci_source = "N/A"
 
-    # ==========================================
-    # 7) DISPLAY
-    # ==========================================
+    # DISPLAY
     st.divider()
     st.subheader(T["res_title"])
 
@@ -471,7 +457,7 @@ if st.button(T["btn_run"], type="primary"):
     st.info(
         T["res_interp"].format(risk_mean) + "\n\n" +
         T["res_uncert"].format(low_ci, high_ci, spread) + "\n\n" +
-        f"*Method note: point estimate uses **{used_method}**; CI uses {'DE bootstrap' if de_weights_matrix is not None else 'stored bootstrap' if bootstrap_weights is not None else 'N/A'}.*"
+        f"*Method note: point estimate uses **{used_method}**; CI uses **{ci_source}**.*"
     )
 
     st.write(f"### {T['plot_title']}")
@@ -488,7 +474,7 @@ if st.button(T["btn_run"], type="primary"):
             label=f"{T['plot_legend_point']}: {risk_mean:.1%}"
         )
 
-        plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight="bold", pad=15)
+        plt.title("DE-bootstrap Uncertainty Analysis", fontsize=12, fontweight="bold", pad=15)
         ax.set_xlabel(T["plot_xlabel"], fontsize=10)
         ax.set_ylabel(T["plot_ylabel"], fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
