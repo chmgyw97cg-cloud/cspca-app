@@ -168,7 +168,7 @@ def load_prediction_system(_version="v1"):
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
-    data_packet = load_prediction_system("v1")
+    data_packet = load_prediction_system("v1")  # đổi "v1" -> "v2" nếu bạn muốn ép refresh cache
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
@@ -177,7 +177,6 @@ try:
     # NEW: DE ensemble params
     de_weights = data_packet.get("de_weights")
     model_names_ordered = data_packet.get("model_names_ordered")
-
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
@@ -216,7 +215,6 @@ except Exception as e:
 # ==========================================
 # 4. USER INTERFACE
 # ==========================================
-
 col_header, col_lang = st.columns([6, 2])
 with col_lang:
     selected_lang = st.selectbox(
@@ -318,7 +316,9 @@ if st.button(T["btn_run"], type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
 
-    # Spline Logic (SAFE: do not rename columns)
+    # =========================
+    # SPLINE LOGIC (FIXED: robust rename)
+    # =========================
     try:
         safe_lb, safe_ub = min(knots) - 5.0, max(knots) + 5.0
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
@@ -327,15 +327,35 @@ if st.button(T["btn_run"], type="primary"):
             {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub},
             return_type="dataframe"
         )
+
+        # --- ROBUST rename spline columns to match training feature names ---
+        spline_cols = []
+        for col in spline_df.columns:
+            m = re.search(r"\[(\d+)\]$", str(col))
+            if m:
+                spline_cols.append((int(m.group(1)), col))
+
+        spline_cols_sorted = [c for _, c in sorted(spline_cols, key=lambda t: t[0])]
+
+        rename_map = {}
+        for new_i, old_col in enumerate(spline_cols_sorted):
+            rename_map[old_col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{new_i}]"
+
+        spline_df = spline_df.rename(columns=rename_map)
+
+        # Ensure Intercept exists (some pipelines may expect it)
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
+
         df_full = pd.concat([df_input, spline_df], axis=1)
 
     except Exception as e:
         st.error(f"Spline Error: {e}")
         st.stop()
 
-    # Base models inference (ordered)
+    # =========================
+    # BASE MODELS INFERENCE (ordered)
+    # =========================
     loop_names = model_names_ordered if (model_names_ordered is not None) else list(base_models.keys())
     loop_names = [m for m in list(loop_names) if m in base_models]
 
@@ -360,7 +380,9 @@ if st.button(T["btn_run"], type="primary"):
 
     base_preds = np.asarray(base_preds, dtype=float)
 
-    # Meta prediction
+    # =========================
+    # META PREDICTION
+    # =========================
     def sigmoid(z):
         return 1 / (1 + np.exp(-z))
 
@@ -370,7 +392,6 @@ if st.button(T["btn_run"], type="primary"):
             st.stop()
 
         p_de = float(np.dot(base_preds, de_weights))
-
         eps = 1e-6
         p_de = min(max(p_de, eps), 1.0 - eps)
 
@@ -381,7 +402,9 @@ if st.button(T["btn_run"], type="primary"):
         raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
         risk_mean = sigmoid(raw_log_odds + CALIBRATION_OFFSET)
 
-    # Bootstrap CI (unchanged)
+    # =========================
+    # BOOTSTRAP CI
+    # =========================
     if bootstrap_weights is not None:
         boot_log_odds = np.dot(bootstrap_weights, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
         boot_preds = sigmoid(boot_log_odds)
@@ -391,12 +414,9 @@ if st.button(T["btn_run"], type="primary"):
         low_ci, high_ci, has_ci = risk_mean, risk_mean, False
         boot_preds = None
 
-    # DEBUG (optional)
-    st.sidebar.write("Has de_weights:", de_weights is not None)
-    st.sidebar.write("Using:", "DE" if de_weights is not None else "LOGISTIC FALLBACK")
-    st.sidebar.write("risk_mean:", f"{risk_mean:.6f}")
-
-    # Display
+    # =========================
+    # DISPLAY
+    # =========================
     st.divider()
     st.subheader(T["res_title"])
 
