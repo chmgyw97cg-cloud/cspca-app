@@ -325,7 +325,17 @@ if st.button(T["btn_run"], type="primary"):
     except Exception as e:
         st.error(f"Spline Error: {e}")
         st.stop()
+# =========================================================
+# FORCE-ALIAS spline columns for Lasso feature names: bs(...)[0..K-1]
+# =========================================================
+basis_cols_df = spline_df.copy()
+if "Intercept" in basis_cols_df.columns:
+    basis_cols_df = basis_cols_df.drop(columns=["Intercept"])
 
+K = basis_cols_df.shape[1]
+for k in range(K):
+    expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
+    df_full[expected] = basis_cols_df.iloc[:, k].values
     # 3. BASE MODELS (enforce ORDER + preserve feature ORDER)
     base_preds = []
 
