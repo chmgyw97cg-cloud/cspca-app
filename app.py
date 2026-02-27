@@ -378,8 +378,8 @@ if st.button(T["btn_run"], type="primary"):
         # prevalence recalibration in logit space
         log_odds_de = np.log(p_de / (1.0 - p_de))
         risk_mean = sigmoid(log_odds_de + CALIBRATION_OFFSET)
-st.sidebar.write("Has de_weights:", de_weights is not None)
-st.sidebar.write("Using:", "DE" if de_weights is not None else "LOGISTIC FALLBACK")
+        st.sidebar.write("Has de_weights:", de_weights is not None)
+        st.sidebar.write("Using:", "DE" if de_weights is not None else "LOGISTIC FALLBACK")
     else:
         # fallback: logistic meta-model
         raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
