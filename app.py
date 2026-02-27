@@ -163,8 +163,8 @@ TRANS = {
 # 3) MODEL LOADING (DE + ORDER + DEFENSIVE)
 # ==========================================
 @st.cache_resource
-def load_prediction_system(_version="v1"):
-    # bump _version to force cache refresh
+def load_prediction_system(_cache_bust="v1"):
+    # bump _cache_bust to force cache refresh
     return joblib.load("cspca_prediction_system.pkl")
 
 def sigmoid(z):
@@ -178,7 +178,7 @@ def _as_float(x, default=0.0) -> float:
         return float(default)
 
 try:
-    # change "v3" whenever you upload new PKL
+    # change version whenever you upload new PKL
     data_packet = load_prediction_system("v3")
 
     base_models = data_packet["base_models"]                      # fitted
@@ -186,24 +186,35 @@ try:
     feature_mapping = data_packet.get("model_features", {}) or {}
     THRESHOLD = float(data_packet.get("threshold", 0.20))
 
-    # DE
+    # DE point weights
     de_weights = data_packet.get("de_weights", None)
     de_weights = np.asarray(de_weights, dtype=float) if de_weights is not None else None
 
+    # ✅ IMPORTANT FIX: accept either key name from PKL
     de_weights_matrix_boot = data_packet.get("de_weights_matrix_boot", None)
-    de_weights_matrix_boot = np.asarray(de_weights_matrix_boot, dtype=float) if de_weights_matrix_boot is not None else None
+    if de_weights_matrix_boot is None:
+        de_weights_matrix_boot = data_packet.get("de_weights_matrix", None)
+    de_weights_matrix_boot = (
+        np.asarray(de_weights_matrix_boot, dtype=float)
+        if de_weights_matrix_boot is not None else None
+    )
 
     model_names_ordered = data_packet.get("model_names_ordered", None)
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    # optional legacy fallback (not used unless DE missing)
+    # optional legacy fallback (only if DE missing)
     meta_weights = data_packet.get("meta_weights", None)
     meta_weights = np.asarray(meta_weights, dtype=float) if meta_weights is not None else None
     meta_intercept = _as_float(data_packet.get("meta_intercept", 0.0), default=0.0)
 
     if de_weights is None and meta_weights is None:
         st.error("❌ Missing weights in .pkl (need de_weights or meta_weights).")
+        st.stop()
+
+    # extra safety check (helps catch pkl inconsistencies early)
+    if (de_weights is not None) and (model_names_ordered is not None) and (len(de_weights) != len(model_names_ordered)):
+        st.error("❌ PKL inconsistency: de_weights length != model_names_ordered length.")
         st.stop()
 
 except Exception as e:
@@ -348,11 +359,11 @@ if st.button(T["btn_run"], type="primary"):
         basis_df = spline_df.copy()
         if "Intercept" in basis_df.columns:
             basis_df = basis_df.drop(columns=["Intercept"])
-        K = basis_df.shape[1]
-        if K == 0:
+        K_spline = basis_df.shape[1]
+        if K_spline == 0:
             raise ValueError("No spline basis columns returned by patsy (after dropping Intercept).")
 
-        for k in range(K):
+        for k in range(K_spline):
             expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
             if expected not in df_full.columns:
                 df_full[expected] = basis_df.iloc[:, k].values
@@ -416,9 +427,9 @@ if st.button(T["btn_run"], type="primary"):
 
     try:
         if de_weights_matrix_boot is not None:
-            W = np.asarray(de_weights_matrix_boot, dtype=float)  # (1000, 6)
+            W = np.asarray(de_weights_matrix_boot, dtype=float)  # (B, 6)
             if W.ndim != 2 or W.shape[1] != len(base_preds):
-                raise ValueError(f"de_weights_matrix_boot shape {W.shape} incompatible with {len(base_preds)} base preds.")
+                raise ValueError(f"de_weights_matrix shape {W.shape} incompatible with {len(base_preds)} base preds.")
 
             p_boot = W @ base_preds
             p_boot = np.clip(p_boot, 1e-6, 1 - 1e-6)
@@ -433,7 +444,7 @@ if st.button(T["btn_run"], type="primary"):
             high_ci = max(high_ci, risk_mean)
 
             has_ci = True
-            ci_source = "DE bootstrap (1000 resamples)"
+            ci_source = f"DE bootstrap (B={W.shape[0]})"
         else:
             has_ci = False
 
