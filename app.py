@@ -164,7 +164,6 @@ TRANS = {
 # ==========================================
 @st.cache_resource
 def load_prediction_system(_cache_bust="v1"):
-    # bump _cache_bust to force cache refresh
     return joblib.load("cspca_prediction_system.pkl")
 
 def sigmoid(z):
@@ -178,10 +177,10 @@ def _as_float(x, default=0.0) -> float:
         return float(default)
 
 try:
-    # change version whenever you upload new PKL
-    data_packet = load_prediction_system("v3")
+    # bump version when upload new PKL
+    data_packet = load_prediction_system("v4")
 
-    base_models = data_packet["base_models"]                      # fitted
+    base_models = data_packet["base_models"]
     knots = np.asarray(data_packet["spline_knots"], dtype=float)
     feature_mapping = data_packet.get("model_features", {}) or {}
     THRESHOLD = float(data_packet.get("threshold", 0.20))
@@ -190,20 +189,18 @@ try:
     de_weights = data_packet.get("de_weights", None)
     de_weights = np.asarray(de_weights, dtype=float) if de_weights is not None else None
 
-    # ✅ IMPORTANT FIX: accept either key name from PKL
-    de_weights_matrix_boot = data_packet.get("de_weights_matrix_boot", None)
-    if de_weights_matrix_boot is None:
-        de_weights_matrix_boot = data_packet.get("de_weights_matrix", None)
-    de_weights_matrix_boot = (
-        np.asarray(de_weights_matrix_boot, dtype=float)
-        if de_weights_matrix_boot is not None else None
-    )
+    # DE bootstrap weight matrix (accept either key)
+    W_boot = data_packet.get("de_weights_matrix", None)
+    if W_boot is None:
+        W_boot = data_packet.get("de_weights_matrix_boot", None)
+    W_boot = np.asarray(W_boot, dtype=float) if W_boot is not None else None
 
+    # model order
     model_names_ordered = data_packet.get("model_names_ordered", None)
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    # optional legacy fallback (only if DE missing)
+    # legacy fallback (only used if DE missing)
     meta_weights = data_packet.get("meta_weights", None)
     meta_weights = np.asarray(meta_weights, dtype=float) if meta_weights is not None else None
     meta_intercept = _as_float(data_packet.get("meta_intercept", 0.0), default=0.0)
@@ -212,7 +209,6 @@ try:
         st.error("❌ Missing weights in .pkl (need de_weights or meta_weights).")
         st.stop()
 
-    # extra safety check (helps catch pkl inconsistencies early)
     if (de_weights is not None) and (model_names_ordered is not None) and (len(de_weights) != len(model_names_ordered)):
         st.error("❌ PKL inconsistency: de_weights length != model_names_ordered length.")
         st.stop()
@@ -272,7 +268,7 @@ with st.sidebar:
     with st.expander(T["calib_title"], expanded=True):
         st.markdown(T["calib_desc"])
 
-        DEFAULT_TARGET = 38.0  # PRECISION
+        DEFAULT_TARGET = 38.0
         local_prev_pct = st.number_input(
             T["calib_input"],
             min_value=1.0, max_value=99.0,
@@ -280,7 +276,7 @@ with st.sidebar:
             step=0.5, format="%.1f"
         )
 
-        TRAIN_PREV = 0.452  # dev cohort prevalence
+        TRAIN_PREV = 0.452
         target_prev = local_prev_pct / 100.0
 
         def logit(p):
@@ -313,7 +309,6 @@ if st.button(T["btn_run"], type="primary"):
             st.markdown(w)
         st.caption(T["warn_footer"])
 
-    # basic features
     psa_f = float(psa)
     vol_f = float(vol)
     log_psa_val = np.log(psa_f)
@@ -341,32 +336,32 @@ if st.button(T["btn_run"], type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
 
-    # spline + FORCE-ALIAS by position
+    # =====================================================
+    # SPLINE (MATCH TRAINING): NO lower_bound/upper_bound
+    # + FORCE-ALIAS by POSITION (safe)
+    # =====================================================
     try:
-        safe_lb, safe_ub = float(np.min(knots) - 5.0), float(np.max(knots) + 5.0)
-        spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
+        spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False)"
         spline_df = dmatrix(
             spline_formula,
-            {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub},
+            {"log_PSA": df_input["log_PSA"], "knots": knots},
             return_type="dataframe"
         )
 
-        if "Intercept" not in spline_df.columns:
-            spline_df["Intercept"] = 1.0
-
         df_full = pd.concat([df_input, spline_df], axis=1)
 
+        # FORCE-ALIAS by position to guarantee bs(...)[k] exists if model_features refer to it
         basis_df = spline_df.copy()
         if "Intercept" in basis_df.columns:
             basis_df = basis_df.drop(columns=["Intercept"])
         K_spline = basis_df.shape[1]
         if K_spline == 0:
-            raise ValueError("No spline basis columns returned by patsy (after dropping Intercept).")
+            raise ValueError("No spline basis columns returned by patsy.")
 
         for k in range(K_spline):
-            expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
-            if expected not in df_full.columns:
-                df_full[expected] = basis_df.iloc[:, k].values
+            alias = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
+            if alias not in df_full.columns:
+                df_full[alias] = basis_df.iloc[:, k].values
 
         df_full.columns = [str(c) for c in df_full.columns]
 
@@ -419,17 +414,17 @@ if st.button(T["btn_run"], type="primary"):
         risk_mean = float(sigmoid(raw_log_odds + CALIBRATION_OFFSET))
         used_method = "LOGISTIC_FALLBACK"
 
-    # CI: prefer DE-bootstrap matrix if available
+    # CI: use DE bootstrap matrix if available
     has_ci = False
     low_ci = high_ci = risk_mean
     boot_preds = None
     ci_source = "N/A"
 
     try:
-        if de_weights_matrix_boot is not None:
-            W = np.asarray(de_weights_matrix_boot, dtype=float)  # (B, 6)
+        if W_boot is not None:
+            W = np.asarray(W_boot, dtype=float)
             if W.ndim != 2 or W.shape[1] != len(base_preds):
-                raise ValueError(f"de_weights_matrix shape {W.shape} incompatible with {len(base_preds)} base preds.")
+                raise ValueError(f"DE weight-matrix shape {W.shape} incompatible with {len(base_preds)} base preds.")
 
             p_boot = W @ base_preds
             p_boot = np.clip(p_boot, 1e-6, 1 - 1e-6)
@@ -439,14 +434,12 @@ if st.button(T["btn_run"], type="primary"):
             low_ci = float(np.percentile(boot_preds, 2.5))
             high_ci = float(np.percentile(boot_preds, 97.5))
 
-            # ensure CI brackets point estimate
+            # ensure bracket point estimate
             low_ci = min(low_ci, risk_mean)
             high_ci = max(high_ci, risk_mean)
 
             has_ci = True
             ci_source = f"DE bootstrap (B={W.shape[0]})"
-        else:
-            has_ci = False
 
     except Exception as e:
         st.warning(f"DE-bootstrap CI unavailable: {e}")
