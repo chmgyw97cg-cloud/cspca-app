@@ -5,7 +5,6 @@ import joblib
 from patsy import dmatrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-import re
 
 # ==========================================
 # 1. PAGE CONFIGURATION
@@ -58,7 +57,7 @@ TRANS = {
         "res_low": "Lower 95% CI",
         "res_high": "Upper 95% CI",
         "res_interp": "**Interpretation:** The model predicts a **{:.1%}** probability of csPCa within the ROI.",
-        "res_uncert": "**Uncertainty Note:** Based on 1,000 bootstrap simulations, the 95% CI is **{:.1%}** to **{:.1%}** (uncertainty spread: **{:.1%}**). **A narrower distribution reflects higher model confidence**.",
+        "res_uncert": "**Uncertainty Note:** Based on bootstrap simulations, the 95% CI is **{:.1%}** to **{:.1%}** (spread: **{:.1%}**).",
         "plot_title": "🔍 Risk Probability Distribution",
         "plot_xlabel": "Predicted Probability of csPCa",
         "plot_ylabel": "Probability density",
@@ -104,7 +103,7 @@ TRANS = {
         "res_low": "IC 95% Inf",
         "res_high": "IC 95% Sup",
         "res_interp": "**Interprétation :** Le modèle prédit une probabilité de **{:.1%}** de csPCa dans la cible (ROI).",
-        "res_uncert": "**Note sur l'incertitude :** Basé sur 1 000 simulations bootstrap, l'IC 95% s'étend de **{:.1%}** à **{:.1%}** (écart : **{:.1%}**). **Un intervalle étroit indique une fiabilité accrue**.",
+        "res_uncert": "**Note :** Basé sur bootstrap, l'IC 95% va de **{:.1%}** à **{:.1%}** (écart : **{:.1%}**).",
         "plot_title": "🔍 Distribution de Probabilité du Risque",
         "plot_xlabel": "Probabilité prédite de csPCa",
         "plot_ylabel": "Densité de probabilité",
@@ -115,14 +114,14 @@ TRANS = {
     "🇻🇳 Tiếng Việt": {
         "title": "🛡️ Phân tích Nguy cơ & Độ bất định csPCa",
         "subtitle": "**Mô hình Meta-Stacking Ensemble** | Hỗ trợ Ra quyết định Lâm sàng",
-        "def": "**Định nghĩa:** csPCa (Ung thư tiền liệt tuyến có ý nghĩa lâm sàng) được định nghĩa là **ISUP Grade Group ≥ 2**.",
-        "scope": "**Phạm vi:** Dự báo áp dụng cho **Sinh thiết trúng đích MRI (chỉ vùng ROI)**.",
+        "def": "**Định nghĩa:** csPCa (Ung thư tiền liệt tuyến có ý nghĩa lâm sàng) = **ISUP Grade Group ≥ 2**.",
+        "scope": "**Phạm vi:** Dự báo cho **Sinh thiết trúng đích MRI (ROI-only)**.",
         "expander_title": "📚 Tiêu chuẩn Lâm sàng & Tiêu chí Lựa chọn",
         "expander_content": """
         * **Tuổi:** 55 – 75 tuổi.
         * **Nồng độ PSA:** 0.4 – 50.0 ng/mL.
         * **Thể tích tuyến:** 10 – 110 mL.
-        * **Yêu cầu MRI:** Điểm PI-RADS Max ≥ 3.
+        * **Yêu cầu MRI:** PI-RADS Max ≥ 3.
         """,
         "sidebar_header": "📋 Dữ liệu Bệnh nhân",
         "lbl_age": "Tuổi (năm)",
@@ -136,24 +135,24 @@ TRANS = {
         "lbl_biopsy": "Tiền sử Sinh thiết",
         "opt_biopsy": ["Chưa từng (Naïve)", "Đã từng (Âm tính)", "Không rõ"],
         "calib_title": "⚙️ Hiệu chỉnh mô hình (Calibration)",
-        "calib_desc": "**Tiêu chuẩn: Thử nghiệm PRECISION**\n\nTỷ lệ phát hiện ung thư trung bình (Yield) đối với sinh thiết trúng đích MRI (nhóm PI-RADS ≥ 3).",
+        "calib_desc": "**Tiêu chuẩn: PRECISION (NEJM 2018)**\n\nTỷ lệ dương tính kỳ vọng của ROI-targeted biopsy ở PI-RADS ≥ 3.",
         "calib_input": "Tỷ lệ dương tính sinh thiết (%):",
         "calib_info": "✅ Đã hiệu chỉnh theo:",
         "btn_run": "🚀 CHẠY PHÂN TÍCH",
-        "warn_age": "⚠️ **Tuổi ({})** nằm ngoài phạm vi chính của mô hình (55-75).",
-        "warn_psa": "⚠️ **PSA ({:.1f})** nằm ngoài phạm vi chính của mô hình (0.4-50.0).",
-        "warn_vol": "⚠️ **Thể tích ({:.1f})** nằm ngoài phạm vi chính của mô hình (10-110).",
-        "warn_title": "### ⚠️ Cảnh báo Lâm sàng: Ngoài vùng dữ liệu",
-        "warn_footer": "Kết quả dự báo có thể kém tin cậy đối với bệnh nhân nằm ngoài các tiêu chuẩn này.",
+        "warn_age": "⚠️ **Tuổi ({})** ngoài phạm vi chính (55-75).",
+        "warn_psa": "⚠️ **PSA ({:.1f})** ngoài phạm vi chính (0.4-50.0).",
+        "warn_vol": "⚠️ **Thể tích ({:.1f})** ngoài phạm vi chính (10-110).",
+        "warn_title": "### ⚠️ Cảnh báo: Ngoài vùng dữ liệu",
+        "warn_footer": "Độ tin cậy có thể giảm khi ngoài tiêu chí.",
         "res_title": "📊 Đánh giá Định lượng",
         "res_risk": "Nguy cơ Dự báo",
         "res_low": "KTC 95% (Dưới)",
         "res_high": "KTC 95% (Trên)",
-        "res_interp": "**Diễn giải:** Mô hình dự báo xác suất **{:.1%}** mắc csPCa trong vùng ROI.",
-        "res_uncert": "**Ghi chú về Độ bất định:** Dựa trên 1,000 mô phỏng bootstrap, khoảng tin cậy (CI) 95% là từ **{:.1%}** đến **{:.1%}** (độ rộng phân tán: **{:.1%}**). **Phân phối càng hẹp thể hiện độ tin cậy của mô hình càng cao**.",
+        "res_interp": "**Diễn giải:** Xác suất csPCa trong ROI = **{:.1%}**.",
+        "res_uncert": "**Ghi chú:** Bootstrap KTC 95%: **{:.1%}** đến **{:.1%}** (độ rộng: **{:.1%}**).",
         "plot_title": "🔍 Phân phối Xác suất Nguy cơ",
         "plot_xlabel": "Xác suất Dự báo csPCa",
-        "plot_ylabel": "Tần suất xuất hiện",
+        "plot_ylabel": "Mật độ",
         "plot_legend_dist": "Phân phối Nguy cơ",
         "plot_legend_point": "Điểm Ước lượng",
         "res_psad": "Mật độ PSA (PSAD):"
@@ -161,38 +160,51 @@ TRANS = {
 }
 
 # ==========================================
-# 3. MODEL LOADING (DE + ORDER + DE-BOOTSTRAP)
+# 3. MODEL LOADING (DE + ORDER + FALLBACK + DEFENSIVE)
 # ==========================================
 @st.cache_resource
 def load_prediction_system(_version="v1"):
     return joblib.load("cspca_prediction_system.pkl")
 
+def _as_float(x, default=0.0):
+    try:
+        arr = np.asarray(x).reshape(-1)
+        return float(arr[0])
+    except Exception:
+        return float(default)
+
 try:
     data_packet = load_prediction_system("v1")
-
-    base_models = data_packet["base_models"]
-    knots = np.asarray(data_packet["spline_knots"], dtype=float)
-    feature_mapping = data_packet.get("model_features", {})
+    base_models = data_packet["base_models"]                      # MUST be FITTED pipelines/estimators
+    knots = np.asarray(data_packet["spline_knots"], dtype=float)  # array
+    feature_mapping = data_packet.get("model_features", {}) or {}
     THRESHOLD = float(data_packet.get("threshold", 0.20))
 
-    # DE main + DE-bootstrap
-    de_weights = data_packet.get("de_weights")
-    de_weights_matrix = data_packet.get("de_weights_matrix")
-    model_names_ordered = data_packet.get("model_names_ordered")
+    # DE (paper-aligned)
+    de_weights = data_packet.get("de_weights", None)
+    if de_weights is not None:
+        de_weights = np.asarray(de_weights, dtype=float)
 
-    if de_weights is None or model_names_ordered is None:
-        st.error("❌ .pkl missing DE parameters (de_weights / model_names_ordered). Re-export pkl.")
-        st.stop()
+    model_names_ordered = data_packet.get("model_names_ordered", None)
+    if model_names_ordered is not None:
+        model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    de_weights = np.asarray(de_weights, dtype=float)
+    # Fallback logistic meta (legacy)
+    meta_weights = data_packet.get("meta_weights", None)
+    if meta_weights is not None:
+        meta_weights = np.asarray(meta_weights, dtype=float)
+    meta_intercept = _as_float(data_packet.get("meta_intercept", 0.0), default=0.0)
 
-    if de_weights_matrix is not None:
-        de_weights_matrix = np.asarray(de_weights_matrix, dtype=float)
+    # CI arrays (legacy bootstrap logistic meta)
+    bootstrap_weights = data_packet.get("bootstrap_weights", None)
+    bootstrap_intercepts = data_packet.get("bootstrap_intercepts", None)
+    if bootstrap_weights is not None:
+        bootstrap_weights = np.asarray(bootstrap_weights, dtype=float)
+    if bootstrap_intercepts is not None:
+        bootstrap_intercepts = np.asarray(bootstrap_intercepts, dtype=float).reshape(-1)
 
-    # enforce ordered model list exists in base_models
-    model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
-    if len(model_names_ordered) == 0:
-        st.error("❌ model_names_ordered is empty after filtering by base_models keys.")
+    if de_weights is None and meta_weights is None:
+        st.error("❌ Error: Missing weights in .pkl (need de_weights or meta_weights).")
         st.stop()
 
 except Exception as e:
@@ -254,12 +266,12 @@ with st.sidebar:
             value=DEFAULT_TARGET,
             step=0.5, format="%.1f"
         )
-        st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
 
-        TRAIN_PREV = 0.452  # dev prevalence
+        TRAIN_PREV = 0.452  # your dev cohort prevalence
         target_prev = local_prev_pct / 100.0
 
         def logit(p):
+            p = float(np.clip(p, 1e-9, 1 - 1e-9))
             return np.log(p / (1 - p))
 
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
@@ -272,11 +284,11 @@ with st.sidebar:
 # 5. PREDICTION LOGIC
 # ==========================================
 def sigmoid(z):
-    return 1.0 / (1.0 + np.exp(-z))
+    return 1 / (1 + np.exp(-z))
 
 if st.button(T["btn_run"], type="primary"):
 
-    # 0. CLINICAL VALIDATION
+    # 0. CLINICAL WARNINGS
     warnings = []
     if not (55 <= age <= 75):
         warnings.append(T["warn_age"].format(age))
@@ -293,22 +305,25 @@ if st.button(T["btn_run"], type="primary"):
             st.caption(T["warn_footer"])
 
     # 1. PRE-PROCESSING
-    log_psa_val = np.log(psa)
-    log_vol_val = np.log(vol)
-    psad = psa / vol
+    log_psa_val = np.log(float(psa))
+    log_vol_val = np.log(float(vol))
+    psad = float(psa) / float(vol)
 
     input_dict = {
         "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
-        "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0],
+        "tr_yes": [1 if dre_opt == "Abnormal" else 0],
+        "fam_yes": [1 if fam_opt == "Yes" else 0],
         "atcd_yes": [1 if biopsy_opt == "Prior Negative" else 0],
         "tr": [1 if dre_opt == "Abnormal" else 0],
         "fam": [1 if fam_opt == "Yes" else (2 if fam_opt == "Unknown" else 0)],
         "atcd": [1 if biopsy_opt == "Prior Negative" else 0],
-        "fam_unknown": [1 if fam_opt == "Unknown" else 0], "tr_unknown": [0], "atcd_unknown": [0]
+        "fam_unknown": [1 if fam_opt == "Unknown" else 0],
+        "tr_unknown": [0],
+        "atcd_unknown": [0],
     }
     df_input = pd.DataFrame(input_dict)
 
-    # 2. SPLINE (IMPORTANT: keep patsy column names as-is to match training)
+    # 2. SPLINE (FORCE-ALIAS BY POSITION)
     try:
         safe_lb, safe_ub = float(np.min(knots) - 5.0), float(np.max(knots) + 5.0)
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
@@ -317,44 +332,47 @@ if st.button(T["btn_run"], type="primary"):
             {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub},
             return_type="dataframe"
         )
-        # ensure Intercept exists if your trained feature list expects it
+
+        # Ensure Intercept column exists
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
 
         df_full = pd.concat([df_input, spline_df], axis=1)
+
+        # FORCE-ALIAS: always create bs(...)[0..K-1] by column position
+        basis_df = spline_df.copy()
+        if "Intercept" in basis_df.columns:
+            basis_df = basis_df.drop(columns=["Intercept"])
+        K = basis_df.shape[1]
+        if K == 0:
+            raise ValueError("No spline basis columns returned by patsy (after dropping Intercept).")
+
+        for k in range(K):
+            expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
+            df_full[expected] = basis_df.iloc[:, k].values
+
     except Exception as e:
         st.error(f"Spline Error: {e}")
         st.stop()
-# =========================================================
-# FORCE-ALIAS spline columns for Lasso feature names: bs(...)[0..K-1]
-# =========================================================
-basis_cols_df = spline_df.copy()
-if "Intercept" in basis_cols_df.columns:
-    basis_cols_df = basis_cols_df.drop(columns=["Intercept"])
 
-K = basis_cols_df.shape[1]
-for k in range(K):
-    expected = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{k}]"
-    df_full[expected] = basis_cols_df.iloc[:, k].values
-    # 3. BASE MODELS (enforce ORDER + preserve feature ORDER)
+    # 3. BASE MODELS INFERENCE (ORDERED + STRICT FEATURE ORDER)
+    loop_names = model_names_ordered if model_names_ordered is not None else list(base_models.keys())
+    loop_names = [m for m in list(loop_names) if m in base_models]
+
     base_preds = []
-
-    for name in model_names_ordered:
+    for name in loop_names:
         model = base_models[name]
 
+        # cols must be in exact order used at fit; your pkl's feature_mapping should already be ordered
         cols = feature_mapping.get(name, df_full.columns.tolist())
+        cols = list(cols)
 
-        # ensure all cols exist
-        missing_cols = [c for c in cols if c not in df_full.columns]
-        if missing_cols:
-            st.error(
-                f"Model '{name}' missing columns (up to 12): {missing_cols[:12]}"
-                + (" ..." if len(missing_cols) > 12 else "")
-            )
+        missing = [c for c in cols if c not in df_full.columns]
+        if missing:
+            st.error(f"Model '{name}' missing columns (up to 12): {missing[:12]}{'...' if len(missing) > 12 else ''}")
             st.stop()
 
-        # IMPORTANT: preserve column order exactly as in `cols`
-        X = df_full.loc[:, cols]
+        X = df_full.loc[:, cols]  # enforce column order
 
         try:
             if hasattr(model, "predict_proba"):
@@ -369,51 +387,55 @@ for k in range(K):
 
     base_preds = np.asarray(base_preds, dtype=float)
 
-    # 4. META: DE POINT ESTIMATE + LOGIT CALIBRATION
-    if len(de_weights) != len(base_preds):
-        st.error(f"❌ Weight mismatch: de_weights={len(de_weights)} vs base_preds={len(base_preds)}")
-        st.stop()
+    # 4. META PREDICTION
+    #    - Point estimate: DE (probability convex combiner) -> logit -> +offset -> sigmoid
+    #    - Fallback: logistic meta
+    if de_weights is not None:
+        if len(de_weights) != len(base_preds):
+            st.error(f"❌ Weight mismatch: de_weights has {len(de_weights)}, but got {len(base_preds)} base preds.")
+            st.stop()
 
-    p_de = float(np.dot(base_preds, de_weights))
-    eps = 1e-6
-    p_de = np.clip(p_de, eps, 1.0 - eps)
-
-    log_odds_de = np.log(p_de / (1.0 - p_de))
-    risk_mean = sigmoid(log_odds_de + CALIBRATION_OFFSET)
-
-    # 5. DE-BOOTSTRAP CI from outer-fold weights
-    has_ci = False
-    low_ci, high_ci = risk_mean, risk_mean
-    boot_preds = None
-
-    if de_weights_matrix is not None:
-        W = np.asarray(de_weights_matrix, dtype=float)
-
-        if W.ndim == 2 and W.shape[1] == len(base_preds):
-            n_boot = 1000
-            rng = np.random.default_rng(42)
-            idx = rng.integers(0, W.shape[0], size=n_boot)
-            Wb = W[idx, :]  # (n_boot, n_models)
-
-            # convex guard
-            Wb = np.maximum(Wb, 0.0)
-            s = Wb.sum(axis=1, keepdims=True)
-            Wb = np.where(s > 0, Wb / s, 1.0 / Wb.shape[1])
-
-            p_boot = Wb @ base_preds
-            p_boot = np.clip(p_boot, eps, 1.0 - eps)
-
-            log_odds_boot = np.log(p_boot / (1.0 - p_boot))
-            boot_preds = sigmoid(log_odds_boot + CALIBRATION_OFFSET)
-
-            low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
-            has_ci = True
-        else:
-            st.warning("⚠️ de_weights_matrix shape incompatible; CI not computed.")
+        p_de = float(np.dot(base_preds, de_weights))
+        p_de = float(np.clip(p_de, 1e-6, 1 - 1e-6))
+        log_odds_de = np.log(p_de / (1.0 - p_de))
+        risk_mean = float(sigmoid(log_odds_de + CALIBRATION_OFFSET))
+        used_method = "DE"
     else:
-        st.info("ℹ️ de_weights_matrix not found in pkl; CI not available.")
+        raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
+        risk_mean = float(sigmoid(raw_log_odds + CALIBRATION_OFFSET))
+        used_method = "LOGISTIC_FALLBACK"
 
+    # 5. BOOTSTRAP CI (legacy logistic bootstrap if present)
+    # NOTE: This CI comes from bootstrap logistic meta; we force CI to contain point estimate to avoid "upper < mean" confusion.
+    has_ci = False
+    boot_preds = None
+    low_ci = high_ci = risk_mean
+
+    if bootstrap_weights is not None:
+        try:
+            boot_log_odds = np.dot(bootstrap_weights, base_preds)
+            if bootstrap_intercepts is not None and len(bootstrap_intercepts) == boot_log_odds.shape[0]:
+                boot_log_odds = boot_log_odds + bootstrap_intercepts
+            boot_log_odds = boot_log_odds + CALIBRATION_OFFSET
+            boot_preds = sigmoid(boot_log_odds)
+
+            low_ci = float(np.percentile(boot_preds, 2.5))
+            high_ci = float(np.percentile(boot_preds, 97.5))
+
+            # ensure CI brackets the displayed point estimate
+            low_ci = min(low_ci, risk_mean)
+            high_ci = max(high_ci, risk_mean)
+
+            has_ci = True
+        except Exception as e:
+            st.warning(f"Bootstrap CI unavailable: {e}")
+            has_ci = False
+            low_ci = high_ci = risk_mean
+            boot_preds = None
+
+    # ==========================================
     # 6. DISPLAY
+    # ==========================================
     st.divider()
     st.subheader(T["res_title"])
 
@@ -422,9 +444,11 @@ for k in range(K):
     c2.metric(T["res_low"], f"{low_ci:.1%}" if has_ci else "N/A")
     c3.metric(T["res_high"], f"{high_ci:.1%}" if has_ci else "N/A")
 
+    spread = max(0.0, high_ci - low_ci)
     st.info(
         T["res_interp"].format(risk_mean) + "\n\n" +
-        (T["res_uncert"].format(low_ci, high_ci, high_ci - low_ci) if has_ci else "")
+        T["res_uncert"].format(low_ci, high_ci, spread) + "\n\n" +
+        f"*Method note: point estimate uses **{used_method}**; CI uses stored bootstrap (if available).*"
     )
 
     st.write(f"### {T['plot_title']}")
@@ -436,17 +460,16 @@ for k in range(K):
             boot_preds, fill=True, color="#2c3e50", alpha=0.3,
             ax=ax, linewidth=2, label=T["plot_legend_dist"]
         )
-
         ax.axvline(
             risk_mean, color="#d95f02", linestyle="-", linewidth=2.5,
             label=f"{T['plot_legend_point']}: {risk_mean:.1%}"
         )
 
-        plt.title("DE-weight Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15)
+        plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight="bold", pad=15)
         ax.set_xlabel(T["plot_xlabel"], fontsize=10)
         ax.set_ylabel(T["plot_ylabel"], fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
-        ax.legend(loc='best', fontsize=9)
+        ax.legend(loc="best", fontsize=9)
 
         sns.despine()
         st.pyplot(fig, dpi=300)
