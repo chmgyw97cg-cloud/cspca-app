@@ -11,7 +11,7 @@ import re
 # 1. PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(
-    page_title="csPCa Risk Assistant", 
+    page_title="csPCa Risk Assistant",
     page_icon="⚕️",
     layout="wide"
 )
@@ -161,7 +161,7 @@ TRANS = {
 }
 
 # ==========================================
-# 3. MODEL LOADING
+# 3. MODEL LOADING  (UPDATED: DE + ORDER + FALLBACK + DEFENSIVE)
 # ==========================================
 @st.cache_resource
 def load_prediction_system():
@@ -173,14 +173,35 @@ try:
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
     THRESHOLD = data_packet.get("threshold", 0.20)
+
+    # NEW: DE ensemble params (paper-aligned)
+    de_weights = data_packet.get("de_weights")
+    model_names_ordered = data_packet.get("model_names_ordered")
+
+    if model_names_ordered is not None:
+        model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
+
+    # OLD: logistic meta (fallback) + bootstrap CI
     meta_weights = data_packet.get("meta_weights")
-    meta_intercept = data_packet.get("meta_intercept", 0.0) 
+    meta_intercept = data_packet.get("meta_intercept", 0.0)
+
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
-    
-    if meta_weights is None: st.error("❌ Error: Missing weights."); st.stop()
+
+    # Defensive: bootstrap_intercepts can be scalar in legacy pkl
+    if bootstrap_intercepts is not None:
+        bootstrap_intercepts = np.asarray(bootstrap_intercepts, dtype=float)
+        if np.ndim(bootstrap_intercepts) == 0:
+            bootstrap_intercepts = np.array([float(bootstrap_intercepts)], dtype=float)
+
+    # Must have at least one weight set
+    if de_weights is None and meta_weights is None:
+        st.error("❌ Error: Missing weights in prediction system (.pkl).")
+        st.stop()
+
 except Exception as e:
-    st.error(f"❌ Critical Error: {e}"); st.stop()
+    st.error(f"❌ Critical Error: {e}")
+    st.stop()
 
 # ==========================================
 # 4. USER INTERFACE
@@ -190,15 +211,13 @@ except Exception as e:
 col_header, col_lang = st.columns([6, 2])
 
 with col_lang:
-    # Chọn ngôn ngữ, mặc định là English (index 0)
     selected_lang = st.selectbox(
-        "Language / Langue / Ngôn ngữ", 
-        ["🇬🇧 English", "🇫🇷 Français", "🇻🇳 Tiếng Việt"], 
+        "Language / Langue / Ngôn ngữ",
+        ["🇬🇧 English", "🇫🇷 Français", "🇻🇳 Tiếng Việt"],
         index=0,
         label_visibility="collapsed"
     )
 
-# Lấy từ điển ngôn ngữ hiện tại
 T = TRANS[selected_lang]
 
 # --- MAIN HEADER ---
@@ -209,64 +228,61 @@ st.caption(T["scope"])
 
 with st.expander(T["expander_title"], expanded=False):
     st.markdown(T["expander_content"])
-    
+
 with st.sidebar:
     st.header(T["sidebar_header"])
-    
-    # Định dạng input
+
     age = st.number_input(T["lbl_age"], 40, 95, 65)
     psa = st.number_input(T["lbl_psa"], 0.1, 200.0, 7.5, step=0.1, format="%.1f")
     vol = st.number_input(T["lbl_vol"], 5.0, 300.0, 45.0, step=0.1, format="%.1f")
     pirads = st.selectbox(T["lbl_pirads"], [3, 4, 5], index=1)
-    
+
     st.divider()
-    
-    # Logic xử lý lựa chọn ngôn ngữ cho Radio button
-    
-    # DRE
+
     dre_display = st.radio(T["lbl_dre"], T["opt_dre"], horizontal=True)
-    # Map selection to English logic keys
     dre_map = dict(zip(T["opt_dre"], ["Normal", "Abnormal", "Unknown"]))
     dre_opt = dre_map[dre_display]
 
-    # Family History
     fam_display = st.radio(T["lbl_fam"], T["opt_fam"], horizontal=True)
     fam_map = dict(zip(T["opt_fam"], ["No", "Yes", "Unknown"]))
     fam_opt = fam_map[fam_display]
 
-    # Biopsy History
     biopsy_display = st.radio(T["lbl_biopsy"], T["opt_biopsy"], horizontal=True)
     biopsy_map = dict(zip(T["opt_biopsy"], ["Naïve", "Prior Negative", "Unknown"]))
     biopsy_opt = biopsy_map[biopsy_display]
-    
+
     st.divider()
     with st.expander(T["calib_title"], expanded=True):
         st.markdown(T["calib_desc"])
-        
-        DEFAULT_TARGET = 38.0 # Based on PRECISION NEJM 2018
-        
+
+        DEFAULT_TARGET = 38.0  # Based on PRECISION NEJM 2018
+
         local_prev_pct = st.number_input(
-            T["calib_input"], 
-            min_value=1.0, max_value=99.0, 
-            value=DEFAULT_TARGET, 
+            T["calib_input"],
+            min_value=1.0, max_value=99.0,
+            value=DEFAULT_TARGET,
             step=0.5, format="%.1f"
         )
         st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
-        
-        TRAIN_PREV = 0.452 # Development cohort prevalence
-        
+
+        TRAIN_PREV = 0.452  # Development cohort prevalence
         target_prev = local_prev_pct / 100.0
-        def logit(p): return np.log(p / (1 - p))
+
+        def logit(p): 
+            return np.log(p / (1 - p))
+
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
-        
+
         st.info(f"{T['calib_info']} **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
 
         st.divider()
         st.caption("© 2026 Copyright by Authors")
+
 # ==========================================
 # 5. PREDICTION LOGIC
 # ==========================================
 if st.button(T["btn_run"], type="primary"):
+
     # 0. CLINICAL VALIDATION
     warnings = []
     if not (55 <= age <= 75):
@@ -275,66 +291,108 @@ if st.button(T["btn_run"], type="primary"):
         warnings.append(T["warn_psa"].format(psa))
     if not (10 <= vol <= 110):
         warnings.append(T["warn_vol"].format(vol))
-    
+
     if warnings:
         with st.container():
             st.warning(T["warn_title"])
             for w in warnings:
                 st.markdown(w)
             st.caption(T["warn_footer"])
-                
+
     # 1. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     psad = psa / vol
-    
-    # Input dictionary uses the English Logic Variables (dre_opt, etc.)
+
     input_dict = {
         "age": [age], "PSA": [psa], "log_PSA": [log_psa_val], "log_vol": [log_vol_val], "pirads_max": [pirads],
-        "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0], 
+        "tr_yes": [1 if dre_opt == "Abnormal" else 0], "fam_yes": [1 if fam_opt == "Yes" else 0],
         "atcd_yes": [1 if biopsy_opt == "Prior Negative" else 0],
-        "tr": [1 if dre_opt == "Abnormal" else 0], 
+        "tr": [1 if dre_opt == "Abnormal" else 0],
         "fam": [1 if fam_opt == "Yes" else (2 if fam_opt == "Unknown" else 0)],
         "atcd": [1 if biopsy_opt == "Prior Negative" else 0],
         "fam_unknown": [1 if fam_opt == "Unknown" else 0], "tr_unknown": [0], "atcd_unknown": [0]
     }
     df_input = pd.DataFrame(input_dict)
-    
+
     # Spline Logic
     try:
         safe_lb, safe_ub = min(knots) - 5.0, max(knots) + 5.0
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
-        spline_df = dmatrix(spline_formula, {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub}, return_type="dataframe")
-        
-        rename_map = {col: f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{re.search(r'\[(\d+)\]$', col).group(1)}]" 
-                      for col in spline_df.columns if re.search(r"\[(\d+)\]$", col)}
-        spline_df = spline_df.rename(columns=rename_map)
-        if "Intercept" not in spline_df.columns: spline_df["Intercept"] = 1.0
-        df_full = pd.concat([df_input, spline_df], axis=1)
-    except Exception as e: st.error(f"Spline Error: {e}"); st.stop()
+        spline_df = dmatrix(
+            spline_formula,
+            {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub},
+            return_type="dataframe"
+        )
 
-    # 2. INFERENCE
+        rename_map = {
+            col: f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{re.search(r'\\[(\\d+)\\]$', col).group(1)}]"
+            for col in spline_df.columns if re.search(r"\[(\d+)\]$", col)
+        }
+        spline_df = spline_df.rename(columns=rename_map)
+        if "Intercept" not in spline_df.columns:
+            spline_df["Intercept"] = 1.0
+
+        df_full = pd.concat([df_input, spline_df], axis=1)
+    except Exception as e:
+        st.error(f"Spline Error: {e}")
+        st.stop()
+
+    # 2. INFERENCE (UPDATED: enforce model order if provided)
     base_preds = []
-    for name in list(base_models.keys()):
+
+    loop_names = model_names_ordered if (model_names_ordered is not None) else list(base_models.keys())
+    loop_names = [m for m in list(loop_names) if m in base_models]  # defensive
+
+    for name in loop_names:
         model = base_models[name]
         cols = feature_mapping.get(name, df_full.columns.tolist())
         p = model.predict_proba(df_full[cols])[:, 1][0] if hasattr(model, "predict_proba") else model.predict(df_full[cols])[0]
         base_preds.append(p)
-    base_preds = np.array(base_preds)
-    
-    raw_log_odds = np.dot(base_preds, meta_weights) + meta_intercept
-    risk_mean = 1 / (1 + np.exp(-(raw_log_odds + CALIBRATION_OFFSET)))
-    
+
+    base_preds = np.asarray(base_preds, dtype=float)
+
+    # 3. META (UPDATED: DE point estimate + logit calibration; bootstrap CI unchanged)
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    if de_weights is not None:
+        de_weights_arr = np.asarray(de_weights, dtype=float)
+
+        if len(de_weights_arr) != len(base_preds):
+            st.error(f"❌ Critical Error: Weight mismatch! Expected {len(de_weights_arr)} preds, got {len(base_preds)}.")
+            st.stop()
+
+        # DE convex probability
+        p_de = float(np.dot(base_preds, de_weights_arr))
+
+        # clip before logit
+        eps = 1e-6
+        p_de = min(max(p_de, eps), 1.0 - eps)
+
+        # prevalence recalibration in logit space
+        log_odds_de = np.log(p_de / (1.0 - p_de))
+        risk_mean = sigmoid(log_odds_de + CALIBRATION_OFFSET)
+
+    else:
+        # fallback: logistic meta-model
+        raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
+        risk_mean = sigmoid(raw_log_odds + CALIBRATION_OFFSET)
+
     if bootstrap_weights is not None:
-        boot_log_odds = np.dot(bootstrap_weights, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
-        boot_preds = 1 / (1 + np.exp(-boot_log_odds))
+        bootstrap_weights_arr = np.asarray(bootstrap_weights, dtype=float)
+
+        boot_log_odds = np.dot(bootstrap_weights_arr, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
+        boot_preds = sigmoid(boot_log_odds)
+
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
     else:
         low_ci, high_ci, has_ci = risk_mean, risk_mean, False
+        boot_preds = None
 
-    # 3. DISPLAY
-    st.divider()  
+    # 4. DISPLAY
+    st.divider()
     st.subheader(T["res_title"])
 
     c1, c2, c3 = st.columns(3)
@@ -349,24 +407,27 @@ if st.button(T["btn_run"], type="primary"):
 
     # --- UNCERTAINTY VISUALIZATION ---
     st.write(f"### {T['plot_title']}")
-    if has_ci:
+    if has_ci and boot_preds is not None:
         sns.set_theme(style="whitegrid", context="paper")
         fig, ax = plt.subplots(figsize=(8, 3.5))
-        
-        # Plot KDE
-        sns.kdeplot(boot_preds, fill=True, color="#2c3e50", alpha=0.3, ax=ax, linewidth=2, label=T["plot_legend_dist"])
-        
-        # Vertical line for mean risk
-        ax.axvline(risk_mean, color="#d95f02", linestyle="-", linewidth=2.5, label=f"{T['plot_legend_point']}: {risk_mean:.1%}")
-        
-        # Formatting
+
+        sns.kdeplot(
+            boot_preds, fill=True, color="#2c3e50", alpha=0.3,
+            ax=ax, linewidth=2, label=T["plot_legend_dist"]
+        )
+
+        ax.axvline(
+            risk_mean, color="#d95f02", linestyle="-", linewidth=2.5,
+            label=f"{T['plot_legend_point']}: {risk_mean:.1%}"
+        )
+
         plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15)
         ax.set_xlabel(T["plot_xlabel"], fontsize=10)
         ax.set_ylabel(T["plot_ylabel"], fontsize=10)
         ax.set_xlim(0, max(0.6, high_ci + 0.1))
         ax.legend(loc='best', fontsize=9)
-        
+
         sns.despine()
         st.pyplot(fig, dpi=300)
-        
+
     st.caption(f"**{T['res_psad']}** {psad:.2f} ng/mL²")
