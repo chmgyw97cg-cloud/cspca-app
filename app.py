@@ -18,6 +18,7 @@ st.set_page_config(
 
 # ==========================================
 # 2. LANGUAGE DICTIONARY (Y KHOA CHUẨN)
+#    (GIỮ NGUYÊN NHƯ BẢN CŨ CỦA BẠN)
 # ==========================================
 TRANS = {
     "🇬🇧 English": {
@@ -161,7 +162,7 @@ TRANS = {
 }
 
 # ==========================================
-# 3. MODEL LOADING  (DE + ORDER + FALLBACK + DEFENSIVE)
+# 3. MODEL LOADING (UPDATED)
 # ==========================================
 @st.cache_resource
 def load_prediction_system(_version="v1"):
@@ -169,33 +170,33 @@ def load_prediction_system(_version="v1"):
 
 try:
     data_packet = load_prediction_system("v1")
+
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
     THRESHOLD = float(data_packet.get("threshold", 0.20))
 
-    # NEW (paper-aligned)
+    # NEW: DE ensemble (paper-aligned)
     de_weights = data_packet.get("de_weights")
     model_names_ordered = data_packet.get("model_names_ordered")
 
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    # OLD fallback
+    # OLD: logistic meta fallback (still used for CI refit / backward compatibility)
     meta_weights = data_packet.get("meta_weights")
     meta_intercept = data_packet.get("meta_intercept", 0.0)
 
-    # CI
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
 
-    # ensure numeric arrays
+    # Ensure numeric arrays
+    if de_weights is not None:
+        de_weights = np.asarray(de_weights, dtype=float)
+
     if meta_weights is not None:
         meta_weights = np.asarray(meta_weights, dtype=float)
         meta_intercept = float(np.asarray(meta_intercept).reshape(-1)[0])
-
-    if de_weights is not None:
-        de_weights = np.asarray(de_weights, dtype=float)
 
     if bootstrap_weights is not None:
         bootstrap_weights = np.asarray(bootstrap_weights, dtype=float)
@@ -210,7 +211,7 @@ try:
         st.stop()
 
 except Exception as e:
-    st.error(f"❌ Critical Error: {e}")
+    st.error(f"❌ Critical Error loading model: {e}")
     st.stop()
 
 # ==========================================
@@ -274,6 +275,7 @@ with st.sidebar:
         target_prev = local_prev_pct / 100.0
 
         def logit(p):
+            p = np.clip(p, 1e-9, 1 - 1e-9)
             return np.log(p / (1 - p))
 
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
@@ -281,27 +283,6 @@ with st.sidebar:
 
         st.divider()
         st.caption("© 2026 Copyright by Authors")
-
-# ==========================================
-# Helpers
-# ==========================================
-def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
-
-def get_expected_cols(model, name, df_full, feature_mapping):
-    """
-    Ensure SAME feature order as training.
-    Priority:
-      1) model.feature_names_in_  (best; sklearn enforces order)
-      2) feature_mapping[name]    (your saved order)
-      3) df_full.columns
-    """
-    if hasattr(model, "feature_names_in_"):
-        return list(map(str, model.feature_names_in_))
-    cols = feature_mapping.get(name, None)
-    if cols is not None and len(cols) > 0:
-        return list(map(str, cols))
-    return list(map(str, df_full.columns.tolist()))
 
 # ==========================================
 # 5. PREDICTION LOGIC
@@ -340,9 +321,9 @@ if st.button(T["btn_run"], type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
 
-    # 2) SPLINE (CRITICAL FIX: rename by POSITION to match training)
+    # 2) SPLINE (ROBUST)
     try:
-        safe_lb, safe_ub = float(min(knots) - 5.0), float(max(knots) + 5.0)
+        safe_lb, safe_ub = float(min(knots)) - 5.0, float(max(knots)) + 5.0
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
         spline_df = dmatrix(
             spline_formula,
@@ -350,17 +331,24 @@ if st.button(T["btn_run"], type="primary"):
             return_type="dataframe"
         )
 
-        # Remove patsy intercept if exists
-        non_intercept_cols = [c for c in spline_df.columns if str(c).lower() != "intercept"]
+        # IMPORTANT FIX:
+        # - Keep Patsy columns (for safety)
+        # - ALSO add "paper-style" bs(...) columns [0..] to satisfy models trained with those names
+        #   (this eliminates your "missing columns: bs(...)[0]..[5]" error)
+        added = 0
+        for col in list(spline_df.columns):
+            m = re.search(r"\[(\d+)\]$", str(col))
+            if m:
+                idx = m.group(1)
+                # common expected name in your training/app mapping
+                target_name = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
+                if target_name not in spline_df.columns:
+                    spline_df[target_name] = spline_df[col]
+                    added += 1
 
-        # Rename to EXACT training names by index
-        rename_map = {}
-        for j, c in enumerate(non_intercept_cols):
-            rename_map[c] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{j}]"
-        spline_df = spline_df.rename(columns=rename_map)
-
-        # Force Intercept column (your pipelines often expect it)
-        spline_df["Intercept"] = 1.0
+        # Ensure Intercept exists
+        if "Intercept" not in spline_df.columns:
+            spline_df["Intercept"] = 1.0
 
         df_full = pd.concat([df_input, spline_df], axis=1)
 
@@ -368,22 +356,23 @@ if st.button(T["btn_run"], type="primary"):
         st.error(f"Spline Error: {e}")
         st.stop()
 
-    # 3) BASE MODELS INFERENCE (ordered + correct feature order)
+    # 3) BASE MODELS INFERENCE (ORDERED + FEATURE ORDER PRESERVED)
     loop_names = model_names_ordered if (model_names_ordered is not None) else list(base_models.keys())
     loop_names = [m for m in list(loop_names) if m in base_models]
 
     base_preds = []
     for name in loop_names:
         model = base_models[name]
-        cols = get_expected_cols(model, name, df_full, feature_mapping)
 
+        cols = feature_mapping.get(name, df_full.columns.tolist())
+        cols = list(cols)  # ensure list
         missing = [c for c in cols if c not in df_full.columns]
         if missing:
-            st.error(f"Model '{name}' missing columns (up to 12): {missing[:12]}{'...' if len(missing) > 12 else ''}")
+            st.error(f"Model '{name}' missing columns (up to 12): {missing[:12]}{'...' if len(missing)>12 else ''}")
             st.stop()
 
-        # IMPORTANT: keep exact order of cols
-        X = df_full[cols]
+        # VERY IMPORTANT: preserve feature order exactly as in training
+        X = df_full.loc[:, cols]
 
         try:
             if hasattr(model, "predict_proba"):
@@ -398,37 +387,46 @@ if st.button(T["btn_run"], type="primary"):
 
     base_preds = np.asarray(base_preds, dtype=float)
 
-    # 4) META PREDICTION (DE point estimate + prevalence recalibration; bootstrap CI unchanged)
+    # 4) META + CALIBRATION + CI (FIXED so CI always consistent with displayed risk)
+    def sigmoid(z):
+        return 1.0 / (1.0 + np.exp(-z))
+
+    # --- DE point estimate (or fallback logistic) ---
     if de_weights is not None:
         if len(de_weights) != len(base_preds):
             st.error(f"❌ Critical Error: Weight mismatch! Expected {len(de_weights)} preds, got {len(base_preds)}.")
             st.stop()
 
-        # DE convex probability
         p_de = float(np.dot(base_preds, de_weights))
-
-        # clip for numerical stability
         eps = 1e-6
         p_de = min(max(p_de, eps), 1.0 - eps)
-
-        # prevalence recalibration in logit space
         log_odds_de = np.log(p_de / (1.0 - p_de))
-        risk_mean = sigmoid(log_odds_de + CALIBRATION_OFFSET)
-
+        risk_point = sigmoid(log_odds_de + CALIBRATION_OFFSET)
     else:
-        # fallback: logistic meta model (legacy)
         raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
-        risk_mean = sigmoid(raw_log_odds + CALIBRATION_OFFSET)
+        risk_point = sigmoid(raw_log_odds + CALIBRATION_OFFSET)
 
-    # Bootstrap CI
+    # --- Bootstrap CI aligned with displayed risk (same pipeline + same recalibration) ---
+    boot_preds = None
+    has_ci = False
+
     if bootstrap_weights is not None:
-        boot_log_odds = np.dot(bootstrap_weights, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
-        boot_preds = sigmoid(boot_log_odds)
+        # bootstrap logistic meta gives probabilities over the same base_preds
+        boot_log_odds = np.dot(bootstrap_weights, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0.0)
+        p_boot = sigmoid(boot_log_odds)  # before prevalence recalibration
+
+        # apply SAME prevalence recalibration in logit space
+        eps = 1e-6
+        p_boot = np.clip(p_boot, eps, 1.0 - eps)
+        boot_preds = sigmoid(np.log(p_boot / (1.0 - p_boot)) + CALIBRATION_OFFSET)
+
+        # report risk from same distribution so CI contains it
+        risk_mean = float(np.median(boot_preds))
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
     else:
-        low_ci, high_ci, has_ci = risk_mean, risk_mean, False
-        boot_preds = None
+        risk_mean = float(risk_point)
+        low_ci, high_ci = risk_mean, risk_mean
 
     # 5) DISPLAY
     st.divider()
@@ -462,7 +460,7 @@ if st.button(T["btn_run"], type="primary"):
         plt.title("Bootstrap Uncertainty Analysis", fontsize=12, fontweight='bold', pad=15)
         ax.set_xlabel(T["plot_xlabel"], fontsize=10)
         ax.set_ylabel(T["plot_ylabel"], fontsize=10)
-        ax.set_xlim(0, max(0.6, high_ci + 0.1))
+        ax.set_xlim(0, max(0.6, float(high_ci) + 0.1))
         ax.legend(loc='best', fontsize=9)
 
         sns.despine()
