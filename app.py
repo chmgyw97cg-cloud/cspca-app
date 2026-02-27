@@ -325,11 +325,16 @@ if st.button(T["btn_run"], type="primary"):
             return_type="dataframe"
         )
 
-        rename_map = {
-            col: f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{re.search(r'\\[(\\d+)\\]$', col).group(1)}]"
-            for col in spline_df.columns if re.search(r"\[(\d+)\]$", col)
-        }
+        # --- SAFE rename spline columns (avoid NoneType .group error) ---
+        rename_map = {}
+        for col in spline_df.columns:
+            m = re.search(r"\[(\d+)\]$", str(col))
+            if m:
+                idx = m.group(1)
+                rename_map[col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
+
         spline_df = spline_df.rename(columns=rename_map)
+
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
 
