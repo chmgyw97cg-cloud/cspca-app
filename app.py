@@ -164,37 +164,47 @@ TRANS = {
 # 3. MODEL LOADING  (UPDATED: DE + ORDER + FALLBACK + DEFENSIVE)
 # ==========================================
 @st.cache_resource
-def load_prediction_system():
+def load_prediction_system(_version="v1"):
     return joblib.load("cspca_prediction_system.pkl")
 
 try:
-    data_packet = load_prediction_system()
+    data_packet = load_prediction_system("v1")
     base_models = data_packet["base_models"]
     knots = data_packet["spline_knots"]
     feature_mapping = data_packet.get("model_features", {})
-    THRESHOLD = data_packet.get("threshold", 0.20)
+    THRESHOLD = float(data_packet.get("threshold", 0.20))
 
-    # NEW: DE ensemble params (paper-aligned)
+    # NEW: DE ensemble params
     de_weights = data_packet.get("de_weights")
     model_names_ordered = data_packet.get("model_names_ordered")
 
     if model_names_ordered is not None:
         model_names_ordered = [m for m in list(model_names_ordered) if m in base_models]
 
-    # OLD: logistic meta (fallback) + bootstrap CI
+    # OLD: logistic meta fallback
     meta_weights = data_packet.get("meta_weights")
     meta_intercept = data_packet.get("meta_intercept", 0.0)
 
+    # CI
     bootstrap_weights = data_packet.get("bootstrap_weights")
     bootstrap_intercepts = data_packet.get("bootstrap_intercepts")
 
-    # Defensive: bootstrap_intercepts can be scalar in legacy pkl
+    # --- ensure numeric arrays ---
+    if meta_weights is not None:
+        meta_weights = np.asarray(meta_weights, dtype=float)
+        meta_intercept = float(np.asarray(meta_intercept).reshape(-1)[0])
+
+    if de_weights is not None:
+        de_weights = np.asarray(de_weights, dtype=float)
+
+    if bootstrap_weights is not None:
+        bootstrap_weights = np.asarray(bootstrap_weights, dtype=float)
+
     if bootstrap_intercepts is not None:
         bootstrap_intercepts = np.asarray(bootstrap_intercepts, dtype=float)
         if np.ndim(bootstrap_intercepts) == 0:
             bootstrap_intercepts = np.array([float(bootstrap_intercepts)], dtype=float)
 
-    # Must have at least one weight set
     if de_weights is None and meta_weights is None:
         st.error("❌ Error: Missing weights in prediction system (.pkl).")
         st.stop()
@@ -207,9 +217,7 @@ except Exception as e:
 # 4. USER INTERFACE
 # ==========================================
 
-# --- LANGUAGE SELECTOR (TOP RIGHT) ---
 col_header, col_lang = st.columns([6, 2])
-
 with col_lang:
     selected_lang = st.selectbox(
         "Language / Langue / Ngôn ngữ",
@@ -220,7 +228,6 @@ with col_lang:
 
 T = TRANS[selected_lang]
 
-# --- MAIN HEADER ---
 st.title(T["title"])
 st.markdown(T["subtitle"])
 st.caption(T["def"])
@@ -255,8 +262,7 @@ with st.sidebar:
     with st.expander(T["calib_title"], expanded=True):
         st.markdown(T["calib_desc"])
 
-        DEFAULT_TARGET = 38.0  # Based on PRECISION NEJM 2018
-
+        DEFAULT_TARGET = 38.0
         local_prev_pct = st.number_input(
             T["calib_input"],
             min_value=1.0, max_value=99.0,
@@ -265,14 +271,13 @@ with st.sidebar:
         )
         st.caption("*Ref: Kasivisvanathan et al., NEJM 2018.*")
 
-        TRAIN_PREV = 0.452  # Development cohort prevalence
+        TRAIN_PREV = 0.452
         target_prev = local_prev_pct / 100.0
 
-        def logit(p): 
+        def logit(p):
             return np.log(p / (1 - p))
 
         CALIBRATION_OFFSET = logit(target_prev) - logit(TRAIN_PREV)
-
         st.info(f"{T['calib_info']} **{TRAIN_PREV:.1%}** ➔ **{local_prev_pct}%**")
 
         st.divider()
@@ -283,7 +288,6 @@ with st.sidebar:
 # ==========================================
 if st.button(T["btn_run"], type="primary"):
 
-    # 0. CLINICAL VALIDATION
     warnings = []
     if not (55 <= age <= 75):
         warnings.append(T["warn_age"].format(age))
@@ -299,7 +303,6 @@ if st.button(T["btn_run"], type="primary"):
                 st.markdown(w)
             st.caption(T["warn_footer"])
 
-    # 1. PRE-PROCESSING
     log_psa_val = np.log(psa)
     log_vol_val = np.log(vol)
     psad = psa / vol
@@ -315,7 +318,7 @@ if st.button(T["btn_run"], type="primary"):
     }
     df_input = pd.DataFrame(input_dict)
 
-    # Spline Logic
+    # Spline Logic (SAFE: do not rename columns)
     try:
         safe_lb, safe_ub = min(knots) - 5.0, max(knots) + 5.0
         spline_formula = "bs(log_PSA, knots=knots, degree=3, include_intercept=False, lower_bound=lb, upper_bound=ub)"
@@ -324,80 +327,76 @@ if st.button(T["btn_run"], type="primary"):
             {"log_PSA": df_input["log_PSA"], "knots": knots, "lb": safe_lb, "ub": safe_ub},
             return_type="dataframe"
         )
-
-        # --- SAFE rename spline columns (avoid NoneType .group error) ---
-        rename_map = {}
-        for col in spline_df.columns:
-            m = re.search(r"\[(\d+)\]$", str(col))
-            if m:
-                idx = m.group(1)
-                rename_map[col] = f"bs(log_PSA, knots=knots, degree=3, include_intercept=False)[{idx}]"
-
-        spline_df = spline_df.rename(columns=rename_map)
-
         if "Intercept" not in spline_df.columns:
             spline_df["Intercept"] = 1.0
-
         df_full = pd.concat([df_input, spline_df], axis=1)
+
     except Exception as e:
         st.error(f"Spline Error: {e}")
         st.stop()
 
-    # 2. INFERENCE (UPDATED: enforce model order if provided)
-    base_preds = []
-
+    # Base models inference (ordered)
     loop_names = model_names_ordered if (model_names_ordered is not None) else list(base_models.keys())
-    loop_names = [m for m in list(loop_names) if m in base_models]  # defensive
+    loop_names = [m for m in list(loop_names) if m in base_models]
 
+    base_preds = []
     for name in loop_names:
         model = base_models[name]
         cols = feature_mapping.get(name, df_full.columns.tolist())
-        p = model.predict_proba(df_full[cols])[:, 1][0] if hasattr(model, "predict_proba") else model.predict(df_full[cols])[0]
+
+        missing = [c for c in cols if c not in df_full.columns]
+        if missing:
+            st.error(f"Model '{name}' missing columns: {missing[:10]}{'...' if len(missing)>10 else ''}")
+            st.stop()
+
+        X = df_full[cols]
+        try:
+            p = model.predict_proba(X)[:, 1][0] if hasattr(model, "predict_proba") else model.predict(X)[0]
+        except Exception as e:
+            st.error(f"Error running model '{name}': {e}")
+            st.stop()
+
         base_preds.append(p)
 
     base_preds = np.asarray(base_preds, dtype=float)
 
-    # 3. META (UPDATED: DE point estimate + logit calibration; bootstrap CI unchanged)
+    # Meta prediction
     def sigmoid(z):
         return 1 / (1 + np.exp(-z))
 
     if de_weights is not None:
-        de_weights_arr = np.asarray(de_weights, dtype=float)
-
-        if len(de_weights_arr) != len(base_preds):
-            st.error(f"❌ Critical Error: Weight mismatch! Expected {len(de_weights_arr)} preds, got {len(base_preds)}.")
+        if len(de_weights) != len(base_preds):
+            st.error(f"❌ Critical Error: Weight mismatch! Expected {len(de_weights)} preds, got {len(base_preds)}.")
             st.stop()
 
-        # DE convex probability
-        p_de = float(np.dot(base_preds, de_weights_arr))
+        p_de = float(np.dot(base_preds, de_weights))
 
-        # clip before logit
         eps = 1e-6
         p_de = min(max(p_de, eps), 1.0 - eps)
 
-        # prevalence recalibration in logit space
         log_odds_de = np.log(p_de / (1.0 - p_de))
         risk_mean = sigmoid(log_odds_de + CALIBRATION_OFFSET)
-        st.sidebar.write("Has de_weights:", de_weights is not None)
-        st.sidebar.write("Using:", "DE" if de_weights is not None else "LOGISTIC FALLBACK")
+
     else:
-        # fallback: logistic meta-model
         raw_log_odds = float(np.dot(base_preds, meta_weights) + meta_intercept)
         risk_mean = sigmoid(raw_log_odds + CALIBRATION_OFFSET)
 
+    # Bootstrap CI (unchanged)
     if bootstrap_weights is not None:
-        bootstrap_weights_arr = np.asarray(bootstrap_weights, dtype=float)
-
-        boot_log_odds = np.dot(bootstrap_weights_arr, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
+        boot_log_odds = np.dot(bootstrap_weights, base_preds) + (bootstrap_intercepts if bootstrap_intercepts is not None else 0) + CALIBRATION_OFFSET
         boot_preds = sigmoid(boot_log_odds)
-
         low_ci, high_ci = np.percentile(boot_preds, 2.5), np.percentile(boot_preds, 97.5)
         has_ci = True
     else:
         low_ci, high_ci, has_ci = risk_mean, risk_mean, False
         boot_preds = None
 
-    # 4. DISPLAY
+    # DEBUG (optional)
+    st.sidebar.write("Has de_weights:", de_weights is not None)
+    st.sidebar.write("Using:", "DE" if de_weights is not None else "LOGISTIC FALLBACK")
+    st.sidebar.write("risk_mean:", f"{risk_mean:.6f}")
+
+    # Display
     st.divider()
     st.subheader(T["res_title"])
 
@@ -411,7 +410,6 @@ if st.button(T["btn_run"], type="primary"):
         T["res_uncert"].format(low_ci, high_ci, high_ci - low_ci)
     )
 
-    # --- UNCERTAINTY VISUALIZATION ---
     st.write(f"### {T['plot_title']}")
     if has_ci and boot_preds is not None:
         sns.set_theme(style="whitegrid", context="paper")
